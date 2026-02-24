@@ -1,0 +1,36 @@
+name: x402-test
+apiVersion: 3
+
+sources:
+  base_logs:
+    type: dataset
+    dataset_name: base.logs
+    version: 1.0.0
+    start_at: earliest
+    filter: >
+      address = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'
+      AND topic0 = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+
+transforms:
+  usdc_transfers:
+    sql: >
+      SELECT
+        transaction_hash as tx_hash,
+        block_number,
+        block_timestamp,
+        'base' as network,
+        address as token,
+        topics,
+        data as amount_raw
+      FROM base_logs
+    primary_key: tx_hash
+
+sinks:
+  r2_output:
+    type: file
+    from: usdc_transfers
+    path: s3://x402-analytics/goldsky/
+    format: json
+    secret_name: R2_CREDENTIALS
+
+resource_size: s

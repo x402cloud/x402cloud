@@ -92,9 +92,9 @@ describe("toLlmsTxt", () => {
       fast: { model: "@cf/meta/llama", type: "text" as const, description: "Fast", neurons: { inputPerMillion: 0, outputPerMillion: 0 }, maxPrice: "$0.01" },
     };
     const txt = toLlmsTxt(models, "0xABC");
-    expect(txt).toContain("Permissionless");
+    expect(txt).toContain("x402 protocol standard");
     expect(txt).toContain("No signup");
-    expect(txt).toContain("No KYC");
+    expect(txt).toContain("No API keys");
     expect(txt).toContain("@x402cloud/client");
     expect(txt).toContain("x402.org");
     expect(txt).toContain("/fast");

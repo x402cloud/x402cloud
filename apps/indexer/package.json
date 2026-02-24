@@ -1,0 +1,28 @@
+{
+  "name": "indexer",
+  "private": true,
+  "version": "0.1.0",
+  "description": "x402 settlement indexer — scans Base and Base Sepolia for proxy settlements",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "backfill": "node --import tsx scripts/backfill.ts"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@cloudflare/workers-types": "^4.20250214.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x402cloud/x402cloud.git",
+    "directory": "apps/indexer"
+  },
+  "author": "x402cloud.ai"
+}

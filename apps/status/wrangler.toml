@@ -1,0 +1,7 @@
+name = "x402cloud-status"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[route]
+pattern = "status.x402cloud.ai"
+custom_domain = true

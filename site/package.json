@@ -2,7 +2,7 @@
   "name": "site",
   "private": true,
   "scripts": {
-    "deploy": "wrangler pages deploy . --project-name=x402cloud-site"
+    "deploy": "wrangler pages deploy . --project-name=x402cloud"
   },
   "devDependencies": {
     "wrangler": "^3.100.0"

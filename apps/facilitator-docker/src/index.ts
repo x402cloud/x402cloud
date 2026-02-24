@@ -30,7 +30,7 @@ const app = new Hono();
 app.get("/", (c) => {
   return c.json({
     name: "x402cloud facilitator (self-hosted)",
-    description: "x402 payment facilitator — verify and settle USDC micropayments on-chain",
+    description: "x402 protocol facilitator — verify and settle USDC payments on-chain using the x402 standard",
     schemes: ["exact", "upto"],
     network: NETWORK,
     facilitator: facilitator.address,

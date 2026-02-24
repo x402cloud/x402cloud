@@ -1,6 +1,6 @@
 # x402cloud
 
-Open source x402 payment infrastructure for the agent economy.
+Open-source implementation of the x402 protocol standard.
 
 ## Monorepo Structure
 

@@ -1,14 +1,14 @@
 # x402cloud.ai — Complete Reference
 
-Open source x402 payment infrastructure for the agent economy. Add micropayments to any API with USDC on Base.
+Open-source implementation of the x402 protocol standard. Libraries, facilitator, and tools for HTTP-native payments with USDC.
 
 ## Overview
 
-x402cloud.ai provides the complete stack for HTTP 402 payments:
+x402cloud.ai implements the x402 protocol standard (x402.org):
 
-- **Open source library** — 5 npm packages for protocol types, EVM payment schemes, server middleware, client SDK, and facilitator logic
+- **Protocol implementation** — 5 npm packages: protocol types, EVM payment schemes, server middleware, client SDK, and facilitator logic
 - **Hosted facilitator** — On-chain payment verification and USDC settlement at facilitator.x402cloud.ai
-- **Agent services** — Production APIs that accept x402 micropayments (AI inference, more coming)
+- **Reference services** — Production APIs using x402 payments (AI inference, more coming)
 
 No API keys. No signup. Payment is authentication.
 

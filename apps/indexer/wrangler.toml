@@ -1,0 +1,24 @@
+name = "x402cloud-indexer"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[triggers]
+crons = ["*/1 * * * *"]
+
+[[r2_buckets]]
+binding = "ANALYTICS"
+bucket_name = "x402-analytics"
+
+# Create the KV namespace before deploying:
+#   wrangler kv namespace create CURSOR
+# Then replace the id below with the returned namespace ID.
+#
+# Create the R2 bucket before deploying:
+#   wrangler r2 bucket create x402-analytics
+[[kv_namespaces]]
+binding = "CURSOR"
+id = "6663fc18c6214c988ec9cf64596c6bb7"
+
+# RPC URLs can be overridden via secrets for better rate limits:
+#   wrangler secret put BASE_RPC_URL
+#   wrangler secret put BASE_SEPOLIA_RPC_URL

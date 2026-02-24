@@ -1,0 +1,23 @@
+name: x402-indexer
+description: Index all x402 payment settlements across chains
+networks:
+  - id: 8453 # Base
+    start_block: 29000000
+    contracts:
+      - name: USDC
+        address:
+          - 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+        handler: src/EventHandlers.ts
+        events:
+          - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+            requiredEntities:
+              - name: Settlement
+        field_selection:
+          transaction_fields:
+            - "from"
+            - "to"
+            - hash
+            - gasPrice
+          block_fields:
+            - number
+            - timestamp

@@ -40,16 +40,22 @@ app.get("/", (c) => {
     return c.html(`<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>facilitator.x402cloud.ai — Payment Facilitator</title>
-<meta name="description" content="x402 payment facilitator — verify and settle USDC micropayments on-chain.">
-<meta property="og:title" content="facilitator.x402cloud.ai"><meta property="og:description" content="x402 payment facilitator — verify and settle USDC micropayments on-chain.">
+<title>facilitator.x402cloud.ai — x402 Protocol Facilitator</title>
+<meta name="description" content="x402 protocol facilitator — verify and settle USDC payments on-chain using the x402 standard.">
+<meta property="og:title" content="facilitator.x402cloud.ai"><meta property="og:description" content="x402 protocol facilitator — verify and settle USDC payments on-chain using the x402 standard.">
 <meta property="og:image" content="https://x402cloud.ai/og.png"><meta name="twitter:card" content="summary_large_image">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#060606;--surface:#0a0a0a;--border:#222;--bd:#2a2a2a;--text:#d4d4d4;--bright:#ececec;--mid:#8a8a8a;--dim:#555;--mono:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:"Inter",-apple-system,sans-serif}
 body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased;font-size:15px}
 a{color:inherit;text-decoration:none}a:hover{color:var(--bright)}
-.w{max-width:900px;margin:0 auto;padding:80px 32px}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(6,6,6,0.9);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+nav .inner{max-width:1080px;margin:0 auto;padding:0 32px;height:52px;display:flex;align-items:center;justify-content:space-between}
+.wordmark{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:0.04em;color:var(--bright)}
+.nav-links{display:flex;gap:24px}
+.nav-links a{font-family:var(--mono);font-size:12px;color:var(--mid);letter-spacing:0.02em;transition:color .15s}
+.nav-links a:hover{color:var(--bright)}
+.w{max-width:900px;margin:0 auto;padding:80px 32px;padding-top:100px}
 h1{font-size:36px;font-weight:700;color:var(--bright);letter-spacing:-0.03em;margin-bottom:8px}
 .sub{font-size:17px;color:var(--mid);margin-bottom:40px}
 .links{display:flex;gap:16px;margin-bottom:48px;flex-wrap:wrap}
@@ -71,11 +77,12 @@ code{font-family:var(--mono);font-size:12px}
 .tag.yes{color:var(--mid);border-color:var(--dim)}
 footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--dim);display:flex;gap:24px}
 footer a{color:var(--dim);transition:color .15s}footer a:hover{color:var(--mid)}
-@media(max-width:600px){.w{padding:48px 20px}h1{font-size:28px}.info{grid-template-columns:1fr}.info-item{border-right:none}}
+@media(max-width:600px){.w{padding:48px 20px;padding-top:80px}h1{font-size:28px}.info{grid-template-columns:1fr}.info-item{border-right:none}nav .inner{padding:0 20px}}
 </style></head><body>
+<nav><div class="inner"><a href="https://x402cloud.ai" class="wordmark">x402cloud.ai</a><div class="nav-links"><a href="https://x402cloud.ai/#services">Services</a><a href="https://x402cloud.ai/#packages">Packages</a><a href="https://status.x402cloud.ai">Status</a><a href="https://github.com/x402cloud/x402cloud">GitHub</a><a href="https://x402cloud.ai/llms.txt">Docs</a></div></div></nav>
 <div class="w">
 <h1>facilitator.x402cloud.ai</h1>
-<p class="sub">x402 payment facilitator — verify and settle USDC micropayments on-chain. Handles Permit2 verification and settlement so your server doesn't need private keys.</p>
+<p class="sub">x402 protocol facilitator — verify and settle USDC payments on-chain using the x402 standard (x402.org). Handles Permit2 verification and settlement so your server doesn't need private keys.</p>
 <div class="links">
 <a href="/health">Health</a>
 <a href="/supported">Supported</a>
@@ -141,7 +148,7 @@ app.use("/*", remoteExactPaymentMiddleware({
 
   return c.json({
     name: "facilitator.x402cloud.ai",
-    description: "x402 payment facilitator — verify and settle USDC micropayments on-chain",
+    description: "x402 protocol facilitator — verify and settle USDC payments on-chain using the x402 standard",
     docs: "https://facilitator.x402cloud.ai/llms.txt",
     health: "https://facilitator.x402cloud.ai/health",
     supported_url: "https://facilitator.x402cloud.ai/supported",
@@ -255,7 +262,7 @@ ${urls.map((u) => `  <url><loc>https://facilitator.x402cloud.ai${u}</loc></url>`
 app.get("/.well-known/agent-card.json", (c) => {
   return c.json({
     name: "facilitator.x402cloud.ai",
-    description: "x402 payment facilitator — verify and settle USDC micropayments on-chain",
+    description: "x402 protocol facilitator — verify and settle USDC payments on-chain using the x402 standard",
     url: "https://facilitator.x402cloud.ai",
     version: "0.1.0",
     capabilities: { streaming: false, pushNotifications: false },

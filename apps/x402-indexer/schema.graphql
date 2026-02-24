@@ -1,0 +1,24 @@
+type Settlement @entity {
+  id: ID!
+  txHash: String! @index
+  blockNumber: Int!
+  timestamp: Int!
+  network: String! @index
+  scheme: String!
+  facilitator: String! @index
+  facilitatorName: String!
+  payer: String! @index
+  payee: String! @index
+  amount: BigInt!
+  amountUsd: Float!
+  token: String!
+}
+
+type DailyStat @entity {
+  id: ID!
+  date: String! @index
+  network: String!
+  settlements: Int!
+  volumeUsd: Float!
+  uniquePayers: Int!
+}

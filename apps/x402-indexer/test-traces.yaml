@@ -1,0 +1,28 @@
+name: x402-traces-test
+apiVersion: 3
+
+sources:
+  proxy_calls:
+    type: dataset
+    dataset_name: base.raw_traces
+    version: 1.0.0
+    start_at: latest
+    filter: >
+      to_address = '0x4020615294c913f045dc10f0a5cdebd86c280001'
+      OR to_address = '0x4020633461b2895a48930ff97ee8fcde8e520002'
+
+transforms:
+  settlements:
+    sql: >
+      SELECT * FROM proxy_calls
+    primary_key: id
+
+sinks:
+  r2_out:
+    type: file
+    from: settlements
+    path: https://331224f43e4f448483cad2f1185ea965.r2.cloudflarestorage.com/x402-analytics/goldsky-traces/
+    format: parquet
+    secret_name: R2_CREDENTIALS
+
+resource_size: s

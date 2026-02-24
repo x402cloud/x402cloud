@@ -63,16 +63,22 @@ app.get("/", (c) => {
     return c.html(`<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>infer.x402cloud.ai — Edge AI Inference</title>
-<meta name="description" content="Edge AI inference with x402 micropayments. OpenAI-compatible. Pay per token with USDC.">
-<meta property="og:title" content="infer.x402cloud.ai"><meta property="og:description" content="Edge AI inference with x402 micropayments. Pay per token with USDC on Base.">
+<title>infer.x402cloud.ai — AI Inference via x402 Protocol</title>
+<meta name="description" content="AI inference using the x402 protocol standard. OpenAI-compatible. Pay per token with USDC.">
+<meta property="og:title" content="infer.x402cloud.ai"><meta property="og:description" content="AI inference using the x402 protocol standard. OpenAI-compatible. Pay per token with USDC.">
 <meta property="og:image" content="https://x402cloud.ai/og.png"><meta name="twitter:card" content="summary_large_image">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#060606;--surface:#0a0a0a;--border:#222;--bd:#2a2a2a;--text:#d4d4d4;--bright:#ececec;--mid:#8a8a8a;--dim:#555;--mono:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:"Inter",-apple-system,sans-serif}
 body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased;font-size:15px}
 a{color:inherit;text-decoration:none}a:hover{color:var(--bright)}
-.w{max-width:900px;margin:0 auto;padding:80px 32px}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(6,6,6,0.9);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+nav .inner{max-width:1080px;margin:0 auto;padding:0 32px;height:52px;display:flex;align-items:center;justify-content:space-between}
+.wordmark{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:0.04em;color:var(--bright)}
+.nav-links{display:flex;gap:24px}
+.nav-links a{font-family:var(--mono);font-size:12px;color:var(--mid);letter-spacing:0.02em;transition:color .15s}
+.nav-links a:hover{color:var(--bright)}
+.w{max-width:900px;margin:0 auto;padding:80px 32px;padding-top:100px}
 h1{font-size:36px;font-weight:700;color:var(--bright);letter-spacing:-0.03em;margin-bottom:8px}
 .sub{font-size:17px;color:var(--mid);margin-bottom:40px}
 .links{display:flex;gap:16px;margin-bottom:48px;flex-wrap:wrap}
@@ -92,11 +98,12 @@ code{font-family:var(--mono);font-size:12px}
 .info-value{font-size:14px;color:var(--bright)}
 footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--dim);display:flex;gap:24px}
 footer a{color:var(--dim);transition:color .15s}footer a:hover{color:var(--mid)}
-@media(max-width:600px){.w{padding:48px 20px}h1{font-size:28px}.info{grid-template-columns:1fr}.info-item{border-right:none}}
+@media(max-width:600px){.w{padding:48px 20px;padding-top:80px}h1{font-size:28px}.info{grid-template-columns:1fr}.info-item{border-right:none}nav .inner{padding:0 20px}}
 </style></head><body>
+<nav><div class="inner"><a href="https://x402cloud.ai" class="wordmark">x402cloud.ai</a><div class="nav-links"><a href="https://x402cloud.ai/#services">Services</a><a href="https://x402cloud.ai/#packages">Packages</a><a href="https://status.x402cloud.ai">Status</a><a href="https://github.com/x402cloud/x402cloud">GitHub</a><a href="https://x402cloud.ai/llms.txt">Docs</a></div></div></nav>
 <div class="w">
 <h1>infer.x402cloud.ai</h1>
-<p class="sub">Permissionless AI inference with x402 micropayments. No signup. No KYC. No API keys. Pay per token with USDC on Base.</p>
+<p class="sub">AI inference using the x402 protocol standard. No signup. No API keys. Pay per token with USDC on Base.</p>
 <div class="links">
 <a href="/models">Models API</a>
 <a href="/llms.txt">llms.txt</a>
@@ -135,7 +142,7 @@ ${modelRows}
 
   return c.json({
     name: "infer.x402cloud.ai",
-    description: "Permissionless AI inference with x402 micropayments. No signup. No KYC. No API keys.",
+    description: "AI inference using the x402 protocol standard. No signup. No API keys.",
     docs: "https://infer.x402cloud.ai/llms.txt",
     models_url: "https://infer.x402cloud.ai/models",
     payment: "x402 upto (USDC on Base)",
@@ -262,7 +269,7 @@ app.get("/openapi.json", (c) => {
     info: {
       title: "infer.x402cloud.ai",
       version: "1.0.0",
-      description: "Edge AI inference with x402 micropayments. OpenAI-compatible. Pay per token with USDC on Base — no signup, no API keys.",
+      description: "AI inference using the x402 protocol standard. OpenAI-compatible. Pay per token with USDC — no signup, no API keys.",
       contact: { url: "https://x402cloud.ai" },
     },
     servers: [{ url: BASE_URL, description: "Production" }],
@@ -292,7 +299,7 @@ app.get("/.well-known/agent-card.json", (c) => {
 
   return c.json({
     name: "infer.x402cloud.ai",
-    description: "Edge AI inference with x402 micropayments. OpenAI-compatible endpoints for text, embeddings, and image generation. Pay per token with USDC — no signup, no API keys.",
+    description: "AI inference using the x402 protocol standard. OpenAI-compatible endpoints for text, embeddings, and image generation. Pay per token with USDC — no signup, no API keys.",
     url: BASE_URL,
     version: "1.0.0",
     protocol: "a2a",

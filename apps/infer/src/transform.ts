@@ -68,9 +68,9 @@ export function toOpenAIModelList(models: Record<string, ModelConfig>) {
 export function toLlmsTxt(models: Record<string, ModelConfig>, recipient: string): string {
   return `# infer.x402cloud.ai
 
-Permissionless AI inference with x402 micropayments. No signup. No KYC. No API keys. Pay per token with USDC on Base.
+AI inference using the x402 protocol standard (x402.org). No signup. No API keys. Pay per token with USDC on Base.
 
-> x402cloud.ai is a managed infrastructure provider for the open x402 protocol (https://x402.org).
+> x402cloud.ai is the open-source implementation of the x402 protocol standard (https://x402.org).
 
 ## Usage
 
