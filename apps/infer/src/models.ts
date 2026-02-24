@@ -1,12 +1,13 @@
 import { MODEL_REGISTRY, type ModelType } from "@x402cloud/protocol";
+import {
+  computeTextCost,
+  computeEmbedCost,
+  computeImageCost,
+  IMAGE_NEURONS_PER_GEN,
+  type NeuronRate,
+} from "./pricing.js";
 
-export type { ModelType };
-
-/** Neuron rates per million tokens (input/output) */
-export type NeuronRate = {
-  inputPerMillion: number;
-  outputPerMillion: number;
-};
+export type { ModelType, NeuronRate };
 
 export type ModelConfig = {
   model: string;
@@ -18,38 +19,23 @@ export type ModelConfig = {
 };
 
 /**
- * Neuron cost: $0.011 per 1,000 neurons = $0.000011 per neuron.
- * Markup: 1.10x actual cost + $0.001 base fee per request.
- *
  * maxPrice assumes worst case:
  *   text:  500 input tokens + 2000 output tokens
  *   embed: 8192 input tokens (max context)
  *   image: 1 generation at 1024x1024, 4 steps
  */
-const COST_PER_NEURON = 0.000011;
-const MARKUP = 1.10;
-const BASE_FEE = 0.001;
 
-/** Calculate max price for a text model given worst-case token counts */
+/** Format a cost as a dollar string for maxPrice */
 function textMaxPrice(neurons: NeuronRate, inputTokens = 500, outputTokens = 2000): string {
-  const inputCost = (inputTokens / 1_000_000) * neurons.inputPerMillion * COST_PER_NEURON;
-  const outputCost = (outputTokens / 1_000_000) * neurons.outputPerMillion * COST_PER_NEURON;
-  const total = (inputCost + outputCost) * MARKUP + BASE_FEE;
-  return `$${total.toFixed(6)}`;
+  return `$${computeTextCost(neurons, inputTokens, outputTokens).toFixed(6)}`;
 }
 
-/** Calculate max price for embed model */
 function embedMaxPrice(neurons: NeuronRate, inputTokens = 8192): string {
-  const cost = (inputTokens / 1_000_000) * neurons.inputPerMillion * COST_PER_NEURON;
-  const total = cost * MARKUP + BASE_FEE;
-  return `$${total.toFixed(6)}`;
+  return `$${computeEmbedCost(neurons, inputTokens).toFixed(6)}`;
 }
 
-/** Calculate max price for image model (flat per generation) */
 function imageMaxPrice(neuronsPerGen: number): string {
-  const cost = neuronsPerGen * COST_PER_NEURON;
-  const total = cost * MARKUP + BASE_FEE;
-  return `$${total.toFixed(6)}`;
+  return `$${computeImageCost(neuronsPerGen).toFixed(6)}`;
 }
 
 const NANO_NEURONS: NeuronRate = { inputPerMillion: 1_542, outputPerMillion: 10_158 };
@@ -59,7 +45,6 @@ const BIG_NEURONS: NeuronRate = { inputPerMillion: 26_668, outputPerMillion: 204
 const THINK_NEURONS: NeuronRate = { inputPerMillion: 45_170, outputPerMillion: 443_756 };
 const CODE_NEURONS: NeuronRate = { inputPerMillion: 60_000, outputPerMillion: 90_909 };
 const EMBED_NEURONS: NeuronRate = { inputPerMillion: 1_075, outputPerMillion: 0 };
-const IMAGE_NEURONS_PER_GEN = 172.8; // per 1024x1024 at 4 steps
 
 /** Build MODELS from the shared registry, adding neurons + pricing on top */
 function buildModels(): Record<string, ModelConfig> {
@@ -90,8 +75,5 @@ function buildModels(): Record<string, ModelConfig> {
 }
 
 export const MODELS: Record<string, ModelConfig> = buildModels();
-
-/** Exported constants for metering */
-export { COST_PER_NEURON, MARKUP, BASE_FEE, IMAGE_NEURONS_PER_GEN };
 
 export type ModelKey = keyof typeof MODELS;

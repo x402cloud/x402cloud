@@ -8,52 +8,35 @@ import {
   type PaymentRequirements,
   type PaymentRequired,
 } from "@x402cloud/protocol";
-import { DEFAULT_USDC_ADDRESSES, type UptoPayload } from "@x402cloud/evm";
-import type { UptoRoutesConfig } from "./types.js";
-import { buildPaymentRequired } from "./response.js";
+import { DEFAULT_USDC_ADDRESSES, type ExactPayload } from "@x402cloud/evm";
+import type { ExactRoutesConfig } from "./types.js";
+import { buildExactPaymentRequired } from "./response.js";
+import type { PaymentFlowResult } from "./core.js";
 
 /** Verify function: takes payload + requirements, returns verification result */
-export type VerifyFn = (
-  payload: UptoPayload,
+export type ExactVerifyFn = (
+  payload: ExactPayload,
   requirements: PaymentRequirements,
 ) => Promise<VerifyResponse>;
 
-/** Settle function: takes payload + requirements + metered amount, returns void (fire-and-forget) */
-export type SettleFn = (
-  payload: UptoPayload,
+/** Settle function: takes payload + requirements, settles for full amount */
+export type ExactSettleFn = (
+  payload: ExactPayload,
   requirements: PaymentRequirements,
-  settlementAmount: string,
 ) => Promise<void>;
 
-/** Result of processing the payment flow, framework-agnostic */
-export type PaymentFlowResult =
-  | { action: "pass" }
-  | { action: "payment_required"; response: PaymentRequired; encoded: string }
-  | { action: "invalid_payment"; status: number; body: object; encoded: string }
-  | { action: "error"; status: number; body: object }
-  | {
-      action: "verified";
-      payer: string;
-      /**
-       * Call after the route handler completes with the handler's response.
-       * Returns settlement headers to set on the response, or null if the
-       * handler returned an error (status >= 400) and settlement was skipped.
-       */
-      settle: (response: Response) => Promise<{ settledAmount: string; payer: string } | null>;
-    };
-
 /**
- * Framework-agnostic x402 upto payment processing.
+ * Framework-agnostic x402 exact payment processing.
  * Handles route matching, payment extraction, verification, and settlement.
  * Returns a discriminated union describing what the framework adapter should do.
  */
-export async function processUptoPayment(
+export async function processExactPayment(
   method: string,
   pathname: string,
   request: Request,
-  routes: UptoRoutesConfig,
-  verify: VerifyFn,
-  settle: SettleFn,
+  routes: ExactRoutesConfig,
+  verify: ExactVerifyFn,
+  settle: ExactSettleFn,
 ): Promise<PaymentFlowResult> {
   const routeKey = `${method} ${pathname}`;
   const routeConfig = routes[routeKey];
@@ -70,35 +53,35 @@ export async function processUptoPayment(
   const paymentHeader = extractPaymentHeader(request);
 
   if (!paymentHeader) {
-    const paymentRequired = buildPaymentRequired(routeConfig, request.url);
+    const paymentRequired = buildExactPaymentRequired(routeConfig, request.url);
     const encoded = encodeRequirementsHeader(paymentRequired);
     return { action: "payment_required", response: paymentRequired, encoded };
   }
 
   // Decode payment payload
-  let uptoPayload: UptoPayload;
+  let exactPayload: ExactPayload;
   try {
     const fullPayload = decodePaymentHeader(paymentHeader);
-    uptoPayload = fullPayload.payload as unknown as UptoPayload;
+    exactPayload = fullPayload.payload as unknown as ExactPayload;
   } catch {
     return { action: "error", status: 400, body: { error: "Invalid payment header" } };
   }
 
   const requirements: PaymentRequirements = {
-    scheme: "upto",
+    scheme: "exact",
     network: routeConfig.network,
     asset,
-    maxAmount: parseUsdcAmount(routeConfig.maxPrice),
+    maxAmount: parseUsdcAmount(routeConfig.price),
     payTo: routeConfig.payTo,
     maxTimeoutSeconds: routeConfig.maxTimeoutSeconds ?? 300,
   };
 
   // Verify payment authorization
-  const verification = await verify(uptoPayload, requirements);
+  const verification = await verify(exactPayload, requirements);
 
   if (!verification.isValid) {
     const status = verification.invalidReason === "permit2_allowance_required" ? 412 : 402;
-    const paymentRequired = buildPaymentRequired(routeConfig, request.url);
+    const paymentRequired = buildExactPaymentRequired(routeConfig, request.url);
     const encoded = encodeRequirementsHeader(paymentRequired);
     return {
       action: "invalid_payment",
@@ -112,6 +95,8 @@ export async function processUptoPayment(
     };
   }
 
+  const settledAmount = parseUsdcAmount(routeConfig.price);
+
   return {
     action: "verified",
     payer: verification.payer,
@@ -120,33 +105,25 @@ export async function processUptoPayment(
         return null;
       }
 
-      // Meter actual usage
-      const consumedAmount = await routeConfig.meter({
-        request,
-        response,
-        authorizedAmount: uptoPayload.permit2Authorization.permitted.amount,
-        payer: verification.payer,
-      });
+      // Settle for full price (fire-and-forget)
+      settle(exactPayload, requirements).catch(() => {});
 
-      // Settle (fire-and-forget)
-      settle(uptoPayload, requirements, consumedAmount).catch(() => {});
-
-      return { settledAmount: consumedAmount, payer: verification.payer };
+      return { settledAmount, payer: verification.payer };
     },
   };
 }
 
 /**
- * Core x402 upto payment middleware scaffold for Hono.
- * Thin adapter around the framework-agnostic processUptoPayment.
+ * Core x402 exact payment middleware scaffold for Hono.
+ * Thin adapter around the framework-agnostic processExactPayment.
  */
-export function buildUptoMiddleware(
-  routes: UptoRoutesConfig,
-  verify: VerifyFn,
-  settle: SettleFn,
+export function buildExactMiddleware(
+  routes: ExactRoutesConfig,
+  verify: ExactVerifyFn,
+  settle: ExactSettleFn,
 ): MiddlewareHandler {
   return async (c, next) => {
-    const result = await processUptoPayment(
+    const result = await processExactPayment(
       c.req.method,
       new URL(c.req.url).pathname,
       c.req.raw,

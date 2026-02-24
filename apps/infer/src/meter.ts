@@ -1,6 +1,11 @@
 import type { MeterFunction } from "@x402cloud/protocol";
-import { MODELS, COST_PER_NEURON, MARKUP, BASE_FEE, IMAGE_NEURONS_PER_GEN } from "./models.js";
+import { MODELS } from "./models.js";
 import type { ModelConfig } from "./models.js";
+import {
+  computeTextCost,
+  computeEmbedCost,
+  computeImageCost,
+} from "./pricing.js";
 
 /**
  * Estimate token count from text (rough: 1 token ~ 4 chars).
@@ -10,37 +15,9 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/**
- * Compute USDC cost in smallest units (6 decimals) for a text model.
- * Uses neuron rates: cost = (tokens / 1M) * neuronsPerM * costPerNeuron * markup + baseFee
- */
-function computeTextCost(
-  config: ModelConfig,
-  inputTokens: number,
-  outputTokens: number,
-): string {
-  const inputCost = (inputTokens / 1_000_000) * config.neurons.inputPerMillion * COST_PER_NEURON;
-  const outputCost = (outputTokens / 1_000_000) * config.neurons.outputPerMillion * COST_PER_NEURON;
-  const total = (inputCost + outputCost) * MARKUP + BASE_FEE;
-  return Math.round(total * 1e6).toString();
-}
-
-/**
- * Compute USDC cost for embeddings.
- */
-function computeEmbedCost(config: ModelConfig, inputTokens: number): string {
-  const cost = (inputTokens / 1_000_000) * config.neurons.inputPerMillion * COST_PER_NEURON;
-  const total = cost * MARKUP + BASE_FEE;
-  return Math.round(total * 1e6).toString();
-}
-
-/**
- * Compute USDC cost for image generation (flat per generation).
- */
-function computeImageCost(): string {
-  const cost = IMAGE_NEURONS_PER_GEN * COST_PER_NEURON;
-  const total = cost * MARKUP + BASE_FEE;
-  return Math.round(total * 1e6).toString();
+/** Format a cost as USDC smallest units (6 decimals) */
+function toMicroUsdc(cost: number): string {
+  return Math.round(cost * 1e6).toString();
 }
 
 /**
@@ -58,14 +35,14 @@ export function createMeter(modelName: string): MeterFunction {
     let cost: string;
 
     if (config.type === "image") {
-      cost = computeImageCost();
+      cost = toMicroUsdc(computeImageCost());
     } else if (config.type === "embed") {
       // Estimate input tokens from request body
       const reqBody = await request.clone().json().catch(() => ({})) as Record<string, any>;
       const input = reqBody.input ?? reqBody.text ?? "";
       const texts = Array.isArray(input) ? input : [input];
       const inputTokens = texts.reduce((sum: number, t: string) => sum + estimateTokens(t), 0);
-      cost = computeEmbedCost(config, inputTokens);
+      cost = toMicroUsdc(computeEmbedCost(config.neurons, inputTokens));
     } else {
       // Text model: estimate from request + response
       const reqBody = await request.clone().json().catch(() => ({})) as Record<string, any>;
@@ -90,7 +67,7 @@ export function createMeter(modelName: string): MeterFunction {
         outputTokens = estimateTokens(outputText);
       }
 
-      cost = computeTextCost(config, inputTokens, outputTokens);
+      cost = toMicroUsdc(computeTextCost(config.neurons, inputTokens, outputTokens));
     }
 
     // Never charge more than authorized

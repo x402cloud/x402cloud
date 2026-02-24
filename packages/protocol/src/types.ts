@@ -39,20 +39,14 @@ export type PaymentPayload = {
 };
 
 /** Facilitator verification result */
-export type VerifyResponse = {
-  isValid: boolean;
-  invalidReason?: string;
-  payer?: string;
-};
+export type VerifyResponse =
+  | { isValid: true; payer: string }
+  | { isValid: false; invalidReason: string };
 
 /** Facilitator settlement result */
-export type SettleResponse = {
-  success: boolean;
-  errorReason?: string;
-  transaction?: string;
-  network?: Network;
-  settledAmount?: string;
-};
+export type SettleResponse =
+  | { success: true; transaction: string; network: Network; settledAmount: string }
+  | { success: false; errorReason: string };
 
 /** Meter function: computes actual cost after request completes */
 export type MeterFunction = (ctx: {

@@ -33,6 +33,7 @@ export async function settleUpto(
   if (BigInt(settlementAmount) === 0n) {
     return {
       success: true,
+      transaction: "",
       settledAmount: "0",
       network: requirements.network,
     };
@@ -81,9 +82,7 @@ export async function settleUpto(
     if (receipt.status === "reverted") {
       return {
         success: false,
-        errorReason: "transaction_reverted",
-        transaction: txHash,
-        network: requirements.network,
+        errorReason: `transaction_reverted: ${txHash}`,
       };
     }
 

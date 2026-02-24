@@ -20,3 +20,20 @@ export type UptoRouteConfig = {
 };
 
 export type UptoRoutesConfig = Record<string, UptoRouteConfig>;
+
+/** Route config for exact (fixed-price) payments */
+export type ExactRouteConfig = {
+  network: Network;
+  /** Fixed price per request in USDC (e.g., "$0.01") */
+  price: string;
+  /** Recipient address */
+  payTo: string;
+  /** USDC token address (defaults to network's USDC) */
+  asset?: string;
+  /** Max seconds before payment expires (default: 300) */
+  maxTimeoutSeconds?: number;
+  /** Description shown to client */
+  description?: string;
+};
+
+export type ExactRoutesConfig = Record<string, ExactRouteConfig>;

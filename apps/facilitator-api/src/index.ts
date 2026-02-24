@@ -1,9 +1,7 @@
 import { Hono } from "hono";
 import { createFacilitator, type Facilitator } from "@x402cloud/facilitator";
 import type { Network, PaymentRequirements } from "@x402cloud/protocol";
-import type { UptoPayload } from "@x402cloud/evm";
-import { base, baseSepolia } from "viem/chains";
-import type { Chain } from "viem";
+import { CHAINS, type UptoPayload } from "@x402cloud/evm";
 
 type Bindings = {
   FACILITATOR_PRIVATE_KEY: string;
@@ -11,11 +9,6 @@ type Bindings = {
   RPC_URL: string;
   NETWORK: string;
   OUR_ADDRESS: string;
-};
-
-const CHAINS: Record<string, Chain> = {
-  "eip155:8453": base,
-  "eip155:84532": baseSepolia,
 };
 
 const app = new Hono<{ Bindings: Bindings }>();

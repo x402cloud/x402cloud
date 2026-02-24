@@ -1,3 +1,12 @@
+import { base, baseSepolia } from "viem/chains";
+import type { Chain } from "viem";
+
+/** Network CAIP-2 ID → viem Chain object */
+export const CHAINS: Record<string, Chain> = {
+  "eip155:8453": base,
+  "eip155:84532": baseSepolia,
+};
+
 /** Uniswap Permit2 — canonical address on all EVM chains */
 export const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3" as const;
 

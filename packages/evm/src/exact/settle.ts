@@ -61,9 +61,7 @@ export async function settleExact(
     if (receipt.status === "reverted") {
       return {
         success: false,
-        errorReason: "transaction_reverted",
-        transaction: txHash,
-        network: requirements.network,
+        errorReason: `transaction_reverted: ${txHash}`,
       };
     }
 

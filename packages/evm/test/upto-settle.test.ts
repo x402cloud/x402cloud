@@ -110,8 +110,10 @@ describe("settleUpto", () => {
       "50000",
     );
     expect(result.success).toBe(false);
-    expect(result.errorReason).toBe("transaction_reverted");
-    expect(result.transaction).toBe(TX_HASH);
+    if (!result.success) {
+      expect(result.errorReason).toContain("transaction_reverted");
+      expect(result.errorReason).toContain(TX_HASH);
+    }
   });
 
   it("rejects tampered payload (bad signature)", async () => {

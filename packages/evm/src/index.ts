@@ -1,5 +1,6 @@
 // Constants
 export {
+  CHAINS,
   PERMIT2_ADDRESS,
   X402_EXACT_PROXY,
   X402_UPTO_PROXY,

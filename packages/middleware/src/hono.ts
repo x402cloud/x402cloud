@@ -1,7 +1,8 @@
 import type { MiddlewareHandler } from "hono";
-import { verifyUpto, settleUpto, type FacilitatorSigner } from "@x402cloud/evm";
-import type { UptoRoutesConfig } from "./types.js";
+import { verifyUpto, settleUpto, verifyExact, settleExact, type FacilitatorSigner } from "@x402cloud/evm";
+import type { UptoRoutesConfig, ExactRoutesConfig } from "./types.js";
 import { buildUptoMiddleware } from "./core.js";
+import { buildExactMiddleware } from "./exact-core.js";
 
 /**
  * Hono middleware for x402 upto payments with a local FacilitatorSigner.
@@ -16,6 +17,23 @@ export function uptoPaymentMiddleware(
     (payload, requirements) => verifyUpto(signer, payload, requirements),
     async (payload, requirements, settlementAmount) => {
       await settleUpto(signer, payload, requirements, settlementAmount);
+    },
+  );
+}
+
+/**
+ * Hono middleware for x402 exact payments with a local FacilitatorSigner.
+ * Use when the server holds a private key (e.g., standalone facilitator).
+ */
+export function exactPaymentMiddleware(
+  routes: ExactRoutesConfig,
+  signer: FacilitatorSigner,
+): MiddlewareHandler {
+  return buildExactMiddleware(
+    routes,
+    (payload, requirements) => verifyExact(signer, payload, requirements),
+    async (payload, requirements) => {
+      await settleExact(signer, payload, requirements);
     },
   );
 }
