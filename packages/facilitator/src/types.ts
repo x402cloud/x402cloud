@@ -17,7 +17,20 @@ export type FacilitatorConfig = {
   feeBasisPoints?: number;
 };
 
+/** A scheme handler knows how to verify and settle one payment scheme */
+export type SchemeHandler = {
+  /** Verify a payment payload (no on-chain tx) */
+  verify(payload: Record<string, unknown>, requirements: PaymentRequirements): Promise<VerifyResponse>;
+  /** Settle a payment on-chain */
+  settle(payload: Record<string, unknown>, requirements: PaymentRequirements, ...args: unknown[]): Promise<SettleResponse>;
+};
+
 export type Facilitator = {
+  /** Scheme-dispatched handlers — extensible map keyed by scheme name */
+  schemes: Record<string, SchemeHandler>;
+
+  // ── Backwards-compatible convenience methods ──────────────────────
+
   /** Verify an upto payment authorization (no on-chain tx) */
   verify(payload: UptoPayload, requirements: PaymentRequirements): Promise<VerifyResponse>;
   /** Settle an upto payment on-chain for the given amount */
@@ -26,6 +39,7 @@ export type Facilitator = {
   verifyExact(payload: ExactPayload, requirements: PaymentRequirements): Promise<VerifyResponse>;
   /** Settle an exact payment on-chain (full authorized amount) */
   settleExact(payload: ExactPayload, requirements: PaymentRequirements): Promise<SettleResponse>;
+
   /** Facilitator's address (pays gas) */
   address: `0x${string}`;
   /** Supported network */

@@ -79,10 +79,22 @@ describe("createFacilitator", () => {
     expect(facilitator).toHaveProperty("settle");
     expect(facilitator).toHaveProperty("verifyExact");
     expect(facilitator).toHaveProperty("settleExact");
+    expect(facilitator).toHaveProperty("schemes");
     expect(typeof facilitator.verify).toBe("function");
     expect(typeof facilitator.settle).toBe("function");
     expect(typeof facilitator.verifyExact).toBe("function");
     expect(typeof facilitator.settleExact).toBe("function");
+  });
+
+  it("has scheme handlers for upto and exact", () => {
+    const facilitator = createFacilitator(testConfig);
+
+    expect(facilitator.schemes).toHaveProperty("upto");
+    expect(facilitator.schemes).toHaveProperty("exact");
+    expect(typeof facilitator.schemes.upto.verify).toBe("function");
+    expect(typeof facilitator.schemes.upto.settle).toBe("function");
+    expect(typeof facilitator.schemes.exact.verify).toBe("function");
+    expect(typeof facilitator.schemes.exact.settle).toBe("function");
   });
 
   it("derives correct address from private key", () => {

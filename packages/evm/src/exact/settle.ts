@@ -5,7 +5,7 @@ import {
   exactProxyAbi,
 } from "../constants.js";
 import { parseChainId } from "../utils.js";
-import { verifyPermit2Signature } from "../upto/shared.js";
+import { verifyPermit2Signature } from "../shared.js";
 
 /**
  * Settle an exact payment on-chain for the full authorized amount.

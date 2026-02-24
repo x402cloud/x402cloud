@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@x402cloud/protocol": "workspace:*",
     "tsx": "^4.19.0"
   },
   "devDependencies": {

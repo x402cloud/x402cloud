@@ -23,5 +23,4 @@ export {
   formatUsdcAmount,
 } from "./headers.js";
 
-export type { ModelType, ModelEntry, ModelKey } from "./models.js";
-export { MODEL_REGISTRY, modelKeysOfType } from "./models.js";
+export type { ModelType } from "./models.js";

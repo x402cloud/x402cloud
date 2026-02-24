@@ -1,2 +1,3 @@
 export { createFacilitator } from "./create.js";
-export type { FacilitatorConfig, Facilitator } from "./types.js";
+export { createFacilitatorRoutes } from "./routes.js";
+export type { FacilitatorConfig, Facilitator, SchemeHandler } from "./types.js";

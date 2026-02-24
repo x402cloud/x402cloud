@@ -91,10 +91,23 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
     walletClient as WalletClient<Transport, Chain>,
   );
 
+  const schemes: Record<string, import("./types.js").SchemeHandler> = {
+    upto: {
+      verify: (payload, requirements) => verifyUpto(signer, payload as any, requirements),
+      settle: (payload, requirements, ...args) => settleUpto(signer, payload as any, requirements, args[0] as string),
+    },
+    exact: {
+      verify: (payload, requirements) => verifyExactEvm(signer, payload as any, requirements),
+      settle: (payload, requirements) => settleExactEvm(signer, payload as any, requirements),
+    },
+  };
+
   return {
     address: account.address,
     network: config.network,
+    schemes,
 
+    // Backwards-compatible convenience methods — delegate to the schemes map
     async verify(payload, requirements) {
       return verifyUpto(signer, payload, requirements);
     },

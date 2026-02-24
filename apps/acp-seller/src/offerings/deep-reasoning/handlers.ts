@@ -1,9 +1,8 @@
-import { MODEL_REGISTRY } from "@x402cloud/protocol";
 import { createHandlers } from "../../handler-factory.js";
 
 const { executeJob, validateRequirements, requestPayment } = createHandlers({
   kind: "text",
-  model: MODEL_REGISTRY.think.cfModel,
+  model: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
   defaults: { max_tokens: 2048, temperature: 0.5 },
   description: "Deep reasoning",
 });

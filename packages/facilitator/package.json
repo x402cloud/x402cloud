@@ -20,6 +20,7 @@
   "dependencies": {
     "@x402cloud/protocol": "workspace:*",
     "@x402cloud/evm": "workspace:*",
+    "hono": "^4.7.0",
     "viem": "^2.23.0"
   },
   "devDependencies": {

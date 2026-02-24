@@ -4,7 +4,7 @@ import {
   type VerifyResponse,
   type PaymentRequirements,
 } from "@x402cloud/protocol";
-import type { UptoPayload } from "@x402cloud/evm";
+import { type UptoPayload, parseUptoPayload } from "@x402cloud/evm";
 import type { UptoRoutesConfig } from "./types.js";
 import { buildPaymentRequired } from "./response.js";
 import { processPayment, buildMiddleware, type PaymentStrategy, type PaymentFlowResult, type MiddlewareOptions } from "./generic-core.js";
@@ -30,7 +30,7 @@ function uptoStrategy(verify: VerifyFn, settle: SettleFn): PaymentStrategy<UptoR
   return {
     scheme: "upto",
     getPrice: (routeConfig) => parseUsdcAmount(routeConfig.maxPrice),
-    castPayload: (decoded) => decoded as unknown as UptoPayload,
+    castPayload: (decoded) => parseUptoPayload(decoded),
     buildPaymentRequired,
     verify,
     buildSettle: (payload, requirements, verification, request, routeConfig, options) => {

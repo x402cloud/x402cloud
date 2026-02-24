@@ -1,9 +1,8 @@
-import { MODEL_REGISTRY } from "@x402cloud/protocol";
 import { createHandlers } from "../../handler-factory.js";
 
 const { executeJob, validateRequirements, requestPayment } = createHandlers({
   kind: "image",
-  model: MODEL_REGISTRY.image.cfModel,
+  model: "@cf/black-forest-labs/flux-1-schnell",
   defaults: { num_steps: 4 },
   description: "Image generation with FLUX.1 Schnell",
 });

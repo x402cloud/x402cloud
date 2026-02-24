@@ -4,7 +4,7 @@ import {
   type VerifyResponse,
   type PaymentRequirements,
 } from "@x402cloud/protocol";
-import type { ExactPayload } from "@x402cloud/evm";
+import { type ExactPayload, parseExactPayload } from "@x402cloud/evm";
 import type { ExactRoutesConfig } from "./types.js";
 import { buildExactPaymentRequired } from "./response.js";
 import { processPayment, buildMiddleware, type PaymentStrategy, type PaymentFlowResult, type MiddlewareOptions } from "./generic-core.js";
@@ -26,7 +26,7 @@ function exactStrategy(verify: ExactVerifyFn, settle: ExactSettleFn): PaymentStr
   return {
     scheme: "exact",
     getPrice: (routeConfig) => parseUsdcAmount(routeConfig.price),
-    castPayload: (decoded) => decoded as unknown as ExactPayload,
+    castPayload: (decoded) => parseExactPayload(decoded),
     buildPaymentRequired: buildExactPaymentRequired,
     verify,
     buildSettle: (payload, requirements, verification, _request, routeConfig, options) => {

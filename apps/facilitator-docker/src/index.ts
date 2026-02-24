@@ -1,8 +1,9 @@
+import { timingSafeEqual } from "crypto";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
-import { createFacilitator, type Facilitator } from "@x402cloud/facilitator";
-import type { Network, PaymentRequirements } from "@x402cloud/protocol";
-import { CHAINS, type UptoPayload, type ExactPayload } from "@x402cloud/evm";
+import { createFacilitator, createFacilitatorRoutes, type Facilitator } from "@x402cloud/facilitator";
+import type { Network } from "@x402cloud/protocol";
+import { CHAINS } from "@x402cloud/evm";
 import type { Context, Next } from "hono";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
@@ -55,11 +56,22 @@ app.get("/supported", (c) => {
   });
 });
 
+// ── Constant-time string comparison (prevents timing attacks) ────────
+function constantTimeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
+}
+
 // ── Auth middleware (optional — only if API_TOKEN is set) ─────────────
 const authMiddleware = async (c: Context, next: Next) => {
   if (API_TOKEN) {
     const auth = c.req.header("Authorization");
-    if (!auth || auth !== `Bearer ${API_TOKEN}`) {
+    if (!auth || !constantTimeEqual(auth, `Bearer ${API_TOKEN}`)) {
       return c.json({ error: "unauthorized" }, 401);
     }
   }
@@ -71,43 +83,8 @@ app.use("/settle", authMiddleware);
 app.use("/verify-exact", authMiddleware);
 app.use("/settle-exact", authMiddleware);
 
-// ── Upto ─────────────────────────────────────────────────────────────
-app.post("/verify", async (c) => {
-  const body = await c.req.json<{ payload: UptoPayload; requirements: PaymentRequirements }>();
-  if (!body.payload || !body.requirements) {
-    return c.json({ isValid: false, invalidReason: "missing payload or requirements" }, 400);
-  }
-  const result = await facilitator.verify(body.payload, body.requirements);
-  return c.json(result);
-});
-
-app.post("/settle", async (c) => {
-  const body = await c.req.json<{ payload: UptoPayload; requirements: PaymentRequirements; settlementAmount: string }>();
-  if (!body.payload || !body.requirements || !body.settlementAmount) {
-    return c.json({ success: false, errorReason: "missing payload, requirements, or settlementAmount" }, 400);
-  }
-  const result = await facilitator.settle(body.payload, body.requirements, body.settlementAmount);
-  return c.json(result);
-});
-
-// ── Exact ────────────────────────────────────────────────────────────
-app.post("/verify-exact", async (c) => {
-  const body = await c.req.json<{ payload: ExactPayload; requirements: PaymentRequirements }>();
-  if (!body.payload || !body.requirements) {
-    return c.json({ isValid: false, invalidReason: "missing payload or requirements" }, 400);
-  }
-  const result = await facilitator.verifyExact(body.payload, body.requirements);
-  return c.json(result);
-});
-
-app.post("/settle-exact", async (c) => {
-  const body = await c.req.json<{ payload: ExactPayload; requirements: PaymentRequirements }>();
-  if (!body.payload || !body.requirements) {
-    return c.json({ success: false, errorReason: "missing payload or requirements" }, 400);
-  }
-  const result = await facilitator.settleExact(body.payload, body.requirements);
-  return c.json(result);
-});
+// ── Payment routes (shared) ──────────────────────────────────────────
+app.route("/", createFacilitatorRoutes(() => facilitator));
 
 console.log(`x402cloud facilitator listening on :${PORT}`);
 console.log(`  network: ${NETWORK}`);

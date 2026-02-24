@@ -33,5 +33,8 @@ export { createExactPayload } from "./exact/client.js";
 export { verifyExact } from "./exact/verify.js";
 export { settleExact } from "./exact/settle.js";
 
+// Payload parsing (runtime validation at decode boundary)
+export { parseUptoPayload, parseExactPayload } from "./parse.js";
+
 // Utils
 export { parseChainId } from "./utils.js";

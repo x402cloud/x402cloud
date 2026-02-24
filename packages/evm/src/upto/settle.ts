@@ -5,7 +5,7 @@ import {
   uptoProxyAbi,
 } from "../constants.js";
 import { parseChainId } from "../utils.js";
-import { verifyPermit2Signature } from "./shared.js";
+import { verifyPermit2Signature } from "../shared.js";
 
 /**
  * Settle an upto payment on-chain for the actual metered amount.
@@ -42,7 +42,7 @@ export async function settleUpto(
   // Signature-only tamper check (no on-chain reads — contract enforces balance/allowance)
   const chainId = parseChainId(requirements.network);
   try {
-    const isValidSig = await verifyPermit2Signature(signer, permit2Authorization, signature, chainId);
+    const isValidSig = await verifyPermit2Signature(signer, permit2Authorization, signature, chainId, X402_UPTO_PROXY);
     if (!isValidSig) {
       return { success: false, errorReason: "tampered_payload" };
     }

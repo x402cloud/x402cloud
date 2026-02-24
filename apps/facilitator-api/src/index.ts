@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { createFacilitator, type Facilitator } from "@x402cloud/facilitator";
-import type { Network, PaymentRequirements } from "@x402cloud/protocol";
-import { CHAINS, type UptoPayload, type ExactPayload } from "@x402cloud/evm";
+import { createFacilitator, createFacilitatorRoutes, type Facilitator } from "@x402cloud/facilitator";
+import type { Network } from "@x402cloud/protocol";
+import { CHAINS } from "@x402cloud/evm";
 import { landingPageHtml } from "./html.js";
 
 type Bindings = {
@@ -215,69 +215,13 @@ app.use("/settle", authMiddleware);
 app.use("/verify-exact", authMiddleware);
 app.use("/settle-exact", authMiddleware);
 
-// ── Upto: Verify ────────────────────────────────────────────────────
-app.post("/verify", async (c) => {
-  const body = await c.req.json<{
-    payload: UptoPayload;
-    requirements: PaymentRequirements;
-  }>();
+// ── Ensure facilitator is initialized (Workers lazy init from env) ──
+app.use("/verify", async (c, next) => { getFacilitator(c.env); await next(); });
+app.use("/settle", async (c, next) => { getFacilitator(c.env); await next(); });
+app.use("/verify-exact", async (c, next) => { getFacilitator(c.env); await next(); });
+app.use("/settle-exact", async (c, next) => { getFacilitator(c.env); await next(); });
 
-  if (!body.payload || !body.requirements) {
-    return c.json({ isValid: false, invalidReason: "missing payload or requirements" }, 400);
-  }
-
-  const f = getFacilitator(c.env);
-  const result = await f.verify(body.payload, body.requirements);
-  return c.json(result);
-});
-
-// ── Upto: Settle ────────────────────────────────────────────────────
-app.post("/settle", async (c) => {
-  const body = await c.req.json<{
-    payload: UptoPayload;
-    requirements: PaymentRequirements;
-    settlementAmount: string;
-  }>();
-
-  if (!body.payload || !body.requirements || !body.settlementAmount) {
-    return c.json({ success: false, errorReason: "missing payload, requirements, or settlementAmount" }, 400);
-  }
-
-  const f = getFacilitator(c.env);
-  const result = await f.settle(body.payload, body.requirements, body.settlementAmount);
-  return c.json(result);
-});
-
-// ── Exact: Verify ───────────────────────────────────────────────────
-app.post("/verify-exact", async (c) => {
-  const body = await c.req.json<{
-    payload: ExactPayload;
-    requirements: PaymentRequirements;
-  }>();
-
-  if (!body.payload || !body.requirements) {
-    return c.json({ isValid: false, invalidReason: "missing payload or requirements" }, 400);
-  }
-
-  const f = getFacilitator(c.env);
-  const result = await f.verifyExact(body.payload, body.requirements);
-  return c.json(result);
-});
-
-// ── Exact: Settle ───────────────────────────────────────────────────
-app.post("/settle-exact", async (c) => {
-  const body = await c.req.json<{
-    payload: ExactPayload;
-    requirements: PaymentRequirements;
-  }>();
-
-  if (!body.payload || !body.requirements) {
-    return c.json({ success: false, errorReason: "missing payload or requirements" }, 400);
-  }
-
-  const f = getFacilitator(c.env);
-  const result = await f.settleExact(body.payload, body.requirements);
-  return c.json(result);
-});
+// ── Payment routes (shared) ──────────────────────────────────────────
+app.route("/", createFacilitatorRoutes(() => facilitator!));
 
 export default app;

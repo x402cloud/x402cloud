@@ -59,22 +59,10 @@ import type {
 } from "@x402cloud/protocol";
 ```
 
-### Model registry
-
-```ts
-import { MODEL_REGISTRY, modelKeysOfType } from "@x402cloud/protocol";
-import type { ModelType, ModelEntry, ModelKey } from "@x402cloud/protocol";
-
-MODEL_REGISTRY.fast; // { cfModel: "@cf/meta/llama-4-scout...", type: "text", description: "Quick and capable" }
-modelKeysOfType("text"); // ["nano", "fast", "smart", "think", "code", "big"]
-```
-
 ## Exports
 
-**Functions:** `encodePaymentHeader`, `decodePaymentHeader`, `encodeRequirementsHeader`, `decodeRequirementsHeader`, `extractPaymentHeader`, `parseUsdcAmount`, `formatUsdcAmount`, `modelKeysOfType`
+**Functions:** `encodePaymentHeader`, `decodePaymentHeader`, `encodeRequirementsHeader`, `decodeRequirementsHeader`, `extractPaymentHeader`, `parseUsdcAmount`, `formatUsdcAmount`
 
-**Constants:** `MODEL_REGISTRY`
-
-**Types:** `Network`, `Scheme`, `PaymentRequirements`, `ResourceInfo`, `PaymentRequired`, `PaymentPayload`, `VerifyResponse`, `SettleResponse`, `MeterFunction`, `RouteConfig`, `RoutesConfig`, `ModelType`, `ModelEntry`, `ModelKey`
+**Types:** `Network`, `Scheme`, `PaymentRequirements`, `ResourceInfo`, `PaymentRequired`, `PaymentPayload`, `VerifyResponse`, `SettleResponse`, `MeterFunction`, `RouteConfig`, `RoutesConfig`, `ModelType`
 
 ## Part of [x402cloud](https://github.com/x402cloud/x402cloud)

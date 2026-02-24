@@ -25,12 +25,16 @@ vi.mock("@x402cloud/protocol", () => ({
 }));
 
 // Mock @x402cloud/evm
-vi.mock("@x402cloud/evm", () => ({
-  DEFAULT_USDC_ADDRESSES: {
-    "eip155:8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    "eip155:84532": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  },
-}));
+vi.mock("@x402cloud/evm", async () => {
+  const actual = await import("@x402cloud/evm");
+  return {
+    DEFAULT_USDC_ADDRESSES: {
+      "eip155:8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "eip155:84532": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    },
+    parseExactPayload: actual.parseExactPayload,
+  };
+});
 
 const TEST_PAY_TO = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88";
 
@@ -49,13 +53,17 @@ function makePaymentPayload(): { x402Version: number; payload: ExactPayload } {
     x402Version: 2,
     payload: {
       signature: "0xdeadbeef" as `0x${string}`,
-      transferAuthorization: {
+      permit2Authorization: {
         from: "0xPayer" as `0x${string}`,
-        to: TEST_PAY_TO as `0x${string}`,
-        value: "10000",
-        validAfter: "0",
-        validBefore: "9999999999",
-        nonce: "0x01" as `0x${string}`,
+        permitted: { token: "0xUSDC" as `0x${string}`, amount: "10000" },
+        spender: "0xSpender" as `0x${string}`,
+        nonce: "1",
+        deadline: "9999999999",
+        witness: {
+          to: TEST_PAY_TO as `0x${string}`,
+          validAfter: "0",
+          extra: "0x" as `0x${string}`,
+        },
       },
     },
   };
