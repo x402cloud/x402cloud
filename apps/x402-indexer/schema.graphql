@@ -6,7 +6,6 @@ type Settlement @entity {
   network: String! @index
   scheme: String!
   facilitator: String! @index
-  facilitatorName: String!
   payer: String! @index
   payee: String! @index
   amount: BigInt!

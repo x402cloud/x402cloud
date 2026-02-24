@@ -3,6 +3,7 @@ import { verifyUpto, settleUpto, verifyExact, settleExact, type FacilitatorSigne
 import type { UptoRoutesConfig, ExactRoutesConfig } from "./types.js";
 import { buildUptoMiddleware } from "./core.js";
 import { buildExactMiddleware } from "./exact-core.js";
+import type { MiddlewareOptions } from "./generic-core.js";
 
 /**
  * Hono middleware for x402 upto payments with a local FacilitatorSigner.
@@ -11,6 +12,7 @@ import { buildExactMiddleware } from "./exact-core.js";
 export function uptoPaymentMiddleware(
   routes: UptoRoutesConfig,
   signer: FacilitatorSigner,
+  options?: MiddlewareOptions,
 ): MiddlewareHandler {
   return buildUptoMiddleware(
     routes,
@@ -18,6 +20,7 @@ export function uptoPaymentMiddleware(
     async (payload, requirements, settlementAmount) => {
       await settleUpto(signer, payload, requirements, settlementAmount);
     },
+    options,
   );
 }
 
@@ -28,6 +31,7 @@ export function uptoPaymentMiddleware(
 export function exactPaymentMiddleware(
   routes: ExactRoutesConfig,
   signer: FacilitatorSigner,
+  options?: MiddlewareOptions,
 ): MiddlewareHandler {
   return buildExactMiddleware(
     routes,
@@ -35,5 +39,6 @@ export function exactPaymentMiddleware(
     async (payload, requirements) => {
       await settleExact(signer, payload, requirements);
     },
+    options,
   );
 }

@@ -10,6 +10,7 @@ export type {
   MeterFunction,
   RouteConfig,
   RoutesConfig,
+  SettlementEvent,
 } from "./types.js";
 
 export {

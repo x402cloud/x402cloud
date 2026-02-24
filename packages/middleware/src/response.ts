@@ -1,30 +1,39 @@
-import type { PaymentRequired, PaymentRequirements, ResourceInfo } from "@x402cloud/protocol";
+import type { PaymentRequired, PaymentRequirements, ResourceInfo, Network } from "@x402cloud/protocol";
 import { parseUsdcAmount } from "@x402cloud/protocol";
 import { DEFAULT_USDC_ADDRESSES } from "@x402cloud/evm";
 import type { UptoRouteConfig, ExactRouteConfig } from "./types.js";
 
-/** Build a 402 PaymentRequired response from upto route config */
-export function buildPaymentRequired(
-  routeConfig: UptoRouteConfig,
+/**
+ * Shared helper: build a 402 PaymentRequired response from scheme, network, price, and route metadata.
+ * Captures the common structure — upto and exact differ only in scheme and which field holds the price.
+ */
+function buildPaymentRequiredResponse(
+  scheme: "upto" | "exact",
+  network: Network,
+  priceString: string,
+  payTo: string,
   resourceUrl: string,
+  asset: string | undefined,
+  maxTimeoutSeconds: number | undefined,
+  description: string | undefined,
 ): PaymentRequired {
-  const asset = routeConfig.asset ?? DEFAULT_USDC_ADDRESSES[routeConfig.network];
-  if (!asset) {
-    throw new Error(`No USDC address for network ${routeConfig.network}. Provide asset explicitly.`);
+  const resolvedAsset = asset ?? DEFAULT_USDC_ADDRESSES[network];
+  if (!resolvedAsset) {
+    throw new Error(`No USDC address for network ${network}. Provide asset explicitly.`);
   }
 
   const requirements: PaymentRequirements = {
-    scheme: "upto",
-    network: routeConfig.network,
-    asset,
-    maxAmount: parseUsdcAmount(routeConfig.maxPrice),
-    payTo: routeConfig.payTo,
-    maxTimeoutSeconds: routeConfig.maxTimeoutSeconds ?? 300,
+    scheme,
+    network,
+    asset: resolvedAsset,
+    maxAmount: parseUsdcAmount(priceString),
+    payTo,
+    maxTimeoutSeconds: maxTimeoutSeconds ?? 300,
   };
 
   const resource: ResourceInfo = {
     url: resourceUrl,
-    description: routeConfig.description,
+    description,
   };
 
   return {
@@ -34,33 +43,36 @@ export function buildPaymentRequired(
   };
 }
 
+/** Build a 402 PaymentRequired response from upto route config */
+export function buildPaymentRequired(
+  routeConfig: UptoRouteConfig,
+  resourceUrl: string,
+): PaymentRequired {
+  return buildPaymentRequiredResponse(
+    "upto",
+    routeConfig.network,
+    routeConfig.maxPrice,
+    routeConfig.payTo,
+    resourceUrl,
+    routeConfig.asset,
+    routeConfig.maxTimeoutSeconds,
+    routeConfig.description,
+  );
+}
+
 /** Build a 402 PaymentRequired response from exact route config */
 export function buildExactPaymentRequired(
   routeConfig: ExactRouteConfig,
   resourceUrl: string,
 ): PaymentRequired {
-  const asset = routeConfig.asset ?? DEFAULT_USDC_ADDRESSES[routeConfig.network];
-  if (!asset) {
-    throw new Error(`No USDC address for network ${routeConfig.network}. Provide asset explicitly.`);
-  }
-
-  const requirements: PaymentRequirements = {
-    scheme: "exact",
-    network: routeConfig.network,
-    asset,
-    maxAmount: parseUsdcAmount(routeConfig.price),
-    payTo: routeConfig.payTo,
-    maxTimeoutSeconds: routeConfig.maxTimeoutSeconds ?? 300,
-  };
-
-  const resource: ResourceInfo = {
-    url: resourceUrl,
-    description: routeConfig.description,
-  };
-
-  return {
-    x402Version: 2,
-    resource,
-    accepts: [requirements],
-  };
+  return buildPaymentRequiredResponse(
+    "exact",
+    routeConfig.network,
+    routeConfig.price,
+    routeConfig.payTo,
+    resourceUrl,
+    routeConfig.asset,
+    routeConfig.maxTimeoutSeconds,
+    routeConfig.description,
+  );
 }

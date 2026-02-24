@@ -1,16 +1,6 @@
-export type SettlementRecord = {
-  txHash: string;
-  blockNumber: number;
-  timestamp: number;
-  network: string;
-  scheme: string;
-  facilitator: string;
-  facilitatorName: string;
-  payer: string;
-  payee: string;
-  amount: string;
-  amountUsd: number;
-  token: string;
+import type { SettlementEvent } from "@x402cloud/protocol";
+
+export type SettlementRecord = SettlementEvent & {
   gasUsed: string;
   gasPrice: string;
 };
@@ -46,4 +36,7 @@ export type RpcLog = {
   address: string;
   topics: string[];
   data: string;
+  transactionHash: string;
+  blockNumber: string;
+  logIndex: string;
 };

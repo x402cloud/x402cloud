@@ -11,6 +11,9 @@
     "deploy": "wrangler deploy",
     "backfill": "node --import tsx scripts/backfill.ts"
   },
+  "dependencies": {
+    "@x402cloud/protocol": "workspace:*"
+  },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.0.0",
     "@cloudflare/workers-types": "^4.20250214.0",

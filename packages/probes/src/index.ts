@@ -1,6 +1,7 @@
 export * from "./types.js";
 export * from "./targets.js";
 export * from "./run.js";
+export { wrapProbe } from "./wrap.js";
 export { allProbes } from "./probes/index.js";
 export {
   rpcAlive,

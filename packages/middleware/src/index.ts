@@ -1,7 +1,10 @@
-// Framework-agnostic payment processing (use these for non-Hono frameworks)
+// Generic payment processing (strategy pattern)
+export { processPayment, buildMiddleware } from "./generic-core.js";
+export type { PaymentStrategy, PaymentFlowResult, SettlementIntent, OnSettlementIntent, MiddlewareOptions } from "./generic-core.js";
+
+// Framework-agnostic upto/exact wrappers (backward compatible)
 export { processUptoPayment } from "./core.js";
 export { processExactPayment } from "./exact-core.js";
-export type { PaymentFlowResult } from "./core.js";
 
 // Hono middleware adapters
 export { buildUptoMiddleware } from "./core.js";
@@ -10,7 +13,8 @@ export { uptoPaymentMiddleware, exactPaymentMiddleware } from "./hono.js";
 export { remoteUptoPaymentMiddleware, remoteExactPaymentMiddleware } from "./remote.js";
 
 // Resilience
-export { createResilientFetch } from "./resilience.js";
+export { createResilientFetch, nextBreakerState } from "./resilience.js";
+export type { CircuitBreaker, BreakerEvent } from "./resilience.js";
 
 // Response builders
 export { buildPaymentRequired, buildExactPaymentRequired } from "./response.js";

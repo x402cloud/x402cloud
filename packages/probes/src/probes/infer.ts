@@ -1,92 +1,47 @@
-import type { Probe } from "../types.js";
+import { wrapProbe } from "../wrap.js";
 
-export const inferHealth: Probe = async (target) => {
-  const start = Date.now();
-
+export const inferHealth = wrapProbe("infer-health", async (target, signal) => {
   if (target.infer === null) {
-    return { name: "infer-health", status: "skip", latencyMs: 0 };
+    return { name: "infer-health", status: "skip" };
   }
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
+  const response = await fetch(`${target.infer}/health`, { signal });
 
-    const response = await fetch(`${target.infer}/health`, {
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      return {
-        name: "infer-health",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: `Health endpoint returned ${response.status}`,
-      };
-    }
-
-    return {
-      name: "infer-health",
-      status: "pass",
-      latencyMs: Date.now() - start,
-    };
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+  if (!response.ok) {
     return {
       name: "infer-health",
       status: "fail",
-      latencyMs: Date.now() - start,
-      error: message,
+      error: `Health endpoint returned ${response.status}`,
     };
   }
-};
 
-export const inferModels: Probe = async (target) => {
-  const start = Date.now();
+  return { name: "infer-health", status: "pass" };
+});
 
+export const inferModels = wrapProbe("infer-models", async (target, signal) => {
   if (target.infer === null) {
-    return { name: "infer-models", status: "skip", latencyMs: 0 };
+    return { name: "infer-models", status: "skip" };
   }
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
+  const response = await fetch(`${target.infer}/models`, { signal });
 
-    const response = await fetch(`${target.infer}/models`, {
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      return {
-        name: "infer-models",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: `Models endpoint returned ${response.status}`,
-      };
-    }
-
-    const data = (await response.json()) as {
-      data?: Array<{ id: string }>;
-      models?: string[];
-    };
-    const models = data.data?.map((m) => m.id) ?? data.models ?? [];
-
-    return {
-      name: "infer-models",
-      status: "pass",
-      latencyMs: Date.now() - start,
-      meta: { modelCount: models.length, models },
-    };
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+  if (!response.ok) {
     return {
       name: "infer-models",
       status: "fail",
-      latencyMs: Date.now() - start,
-      error: message,
+      error: `Models endpoint returned ${response.status}`,
     };
   }
-};
+
+  const data = (await response.json()) as {
+    data?: Array<{ id: string }>;
+    models?: string[];
+  };
+  const models = data.data?.map((m) => m.id) ?? data.models ?? [];
+
+  return {
+    name: "infer-models",
+    status: "pass",
+    meta: { modelCount: models.length, models },
+  };
+});

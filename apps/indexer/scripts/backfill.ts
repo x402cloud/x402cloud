@@ -1,5 +1,5 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { KNOWN_FACILITATORS, FACILITATOR_NAMES, NETWORKS, EXACT_PROXY, UPTO_PROXY, USDC_TRANSFER_TOPIC } from "../src/constants.js";
+import { NETWORKS, EXACT_PROXY, UPTO_PROXY, USDC_TRANSFER_TOPIC } from "../src/constants.js";
 import type { SettlementRecord, NetworkConfig } from "../src/types.js";
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -246,8 +246,6 @@ async function backfillProxySettlements(
           l.topics.length >= 3,
       );
 
-      const facilitatorName = FACILITATOR_NAMES[txInfo.from.toLowerCase()] ?? "unknown";
-
       for (const log of transferLogs) {
         const payer = "0x" + log.topics[1].slice(26);
         const payee = "0x" + log.topics[2].slice(26);
@@ -261,7 +259,6 @@ async function backfillProxySettlements(
           network,
           scheme,
           facilitator: txInfo.from,
-          facilitatorName,
           payer,
           payee,
           amount,
@@ -285,140 +282,6 @@ async function backfillProxySettlements(
   return records;
 }
 
-// ── Strategy 2: Facilitator-based (for non-proxy settlements) ────
-// Some facilitators call USDC directly (transferWithAuthorization).
-// Keep the alchemy_getAssetTransfers approach for these.
-
-async function fetchFacilitatorTransfers(
-  rpcUrl: string,
-  facilitatorAddr: string,
-  usdcAddress: string,
-  pageKey?: string,
-): Promise<{ transfers: AlchemyTransfer[]; nextPageKey?: string }> {
-  const params: Record<string, unknown> = {
-    fromBlock: "0x0",
-    toBlock: "latest",
-    fromAddress: facilitatorAddr,
-    contractAddresses: [usdcAddress],
-    category: ["erc20"],
-    withMetadata: true,
-    maxCount: "0x3e8",
-  };
-  if (pageKey) params.pageKey = pageKey;
-
-  const res = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      method: "alchemy_getAssetTransfers",
-      params: [params],
-      id: 1,
-    }),
-  });
-
-  if (res.status === 429) {
-    await sleep(5000);
-    return fetchFacilitatorTransfers(rpcUrl, facilitatorAddr, usdcAddress, pageKey);
-  }
-
-  const json: AlchemyResponse = await res.json() as AlchemyResponse;
-  if (json.error) throw new Error(`Alchemy error: ${json.error.message}`);
-
-  return {
-    transfers: json.result?.transfers ?? [],
-    nextPageKey: json.result?.pageKey,
-  };
-}
-
-async function backfillFacilitatorDirect(
-  rpcUrl: string,
-  network: string,
-  usdcAddress: string,
-  proxyTxHashes: Set<string>,
-): Promise<SettlementRecord[]> {
-  console.log(`\n  Scanning facilitator direct transfers (non-proxy)...`);
-
-  const records: SettlementRecord[] = [];
-  const seen = new Set<string>();
-
-  for (const addr of KNOWN_FACILITATORS) {
-    if (seen.has(addr)) continue;
-    seen.add(addr);
-
-    const name = FACILITATOR_NAMES[addr] ?? addr.slice(0, 10);
-    let pageKey: string | undefined;
-    let facilTotal = 0;
-
-    do {
-      const { transfers, nextPageKey } = await fetchFacilitatorTransfers(
-        rpcUrl, addr, usdcAddress, pageKey,
-      );
-
-      if (transfers.length === 0) break;
-
-      for (const t of transfers) {
-        // Skip if already captured via proxy scan
-        if (proxyTxHashes.has(t.hash)) continue;
-
-        const timestamp = t.metadata?.blockTimestamp
-          ? Math.floor(new Date(t.metadata.blockTimestamp).getTime() / 1000)
-          : 0;
-
-        // For facilitator direct transfers, the facilitator IS the from address
-        // This is for cases where facilitator transfers USDC directly (payouts, etc.)
-        // The real payer info comes from the receipt — but for Alchemy transfers,
-        // we need to fetch the receipt to get the real Transfer event
-        const receipt = (await rpcCall(rpcUrl, "eth_getTransactionReceipt", [t.hash])) as ReceiptInfo | null;
-        if (!receipt || receipt.status !== "0x1") continue;
-
-        const transferLogs = receipt.logs.filter(
-          (l) =>
-            l.address.toLowerCase() === usdcAddress.toLowerCase() &&
-            l.topics[0] === USDC_TRANSFER_TOPIC &&
-            l.topics.length >= 3,
-        );
-
-        for (const log of transferLogs) {
-          const payer = "0x" + log.topics[1].slice(26);
-          const payee = "0x" + log.topics[2].slice(26);
-          const amount = BigInt(log.data).toString();
-          const amountUsd = Number(BigInt(log.data)) / 1e6;
-
-          records.push({
-            txHash: t.hash,
-            blockNumber: parseInt(t.blockNum, 16),
-            timestamp,
-            network,
-            scheme: "exact",
-            facilitator: addr,
-            facilitatorName: name,
-            payer,
-            payee,
-            amount,
-            amountUsd,
-            token: usdcAddress,
-            gasUsed: receipt ? BigInt(receipt.gasUsed).toString() : "0",
-            gasPrice: "0",
-          });
-        }
-
-        facilTotal += transferLogs.length;
-      }
-
-      pageKey = nextPageKey;
-      await sleep(DELAY_MS);
-    } while (pageKey);
-
-    if (facilTotal > 0) {
-      console.log(`    [${name}] ${facilTotal} direct transfers`);
-    }
-  }
-
-  console.log(`    Total direct facilitator transfers: ${records.length}`);
-  return records;
-}
-
 // ── Main backfill ────────────────────────────────────────────────────
 
 async function backfillNetwork(networkKey: string): Promise<void> {
@@ -437,7 +300,7 @@ async function backfillNetwork(networkKey: string): Promise<void> {
 
   console.log(`\n[${config.name}] Starting backfill`);
 
-  // Phase 1: Proxy-based settlements (exact + upto)
+  // Proxy-based settlements (exact + upto)
   const exactRecords = await backfillProxySettlements(
     rpcUrl, EXACT_PROXY, "Exact", config.name, config.usdc,
   );
@@ -445,23 +308,14 @@ async function backfillNetwork(networkKey: string): Promise<void> {
     rpcUrl, UPTO_PROXY, "Upto", config.name, config.usdc,
   );
 
-  const proxyTxHashes = new Set<string>();
-  for (const r of [...exactRecords, ...uptoRecords]) proxyTxHashes.add(r.txHash);
-
-  // Phase 2: Direct facilitator transfers (non-proxy)
-  const directRecords = await backfillFacilitatorDirect(
-    rpcUrl, config.name, config.usdc, proxyTxHashes,
-  );
-
   // Combine and write
-  const allRecords = [...exactRecords, ...uptoRecords, ...directRecords];
+  const allRecords = [...exactRecords, ...uptoRecords];
   console.log(`\n  Writing ${allRecords.length} total settlements to R2...`);
   await writeToR2(allRecords);
 
   console.log(`\n[${config.name}] Backfill complete.`);
   console.log(`  Exact proxy: ${exactRecords.length}`);
   console.log(`  Upto proxy:  ${uptoRecords.length}`);
-  console.log(`  Direct:      ${directRecords.length}`);
   console.log(`  Total:       ${allRecords.length}`);
 }
 

@@ -1,17 +1,13 @@
 import type { MiddlewareHandler } from "hono";
 import {
-  extractPaymentHeader,
-  decodePaymentHeader,
   parseUsdcAmount,
-  encodeRequirementsHeader,
   type VerifyResponse,
   type PaymentRequirements,
-  type PaymentRequired,
 } from "@x402cloud/protocol";
-import { DEFAULT_USDC_ADDRESSES, type ExactPayload } from "@x402cloud/evm";
+import type { ExactPayload } from "@x402cloud/evm";
 import type { ExactRoutesConfig } from "./types.js";
 import { buildExactPaymentRequired } from "./response.js";
-import type { PaymentFlowResult } from "./core.js";
+import { processPayment, buildMiddleware, type PaymentStrategy, type PaymentFlowResult, type MiddlewareOptions } from "./generic-core.js";
 
 /** Verify function: takes payload + requirements, returns verification result */
 export type ExactVerifyFn = (
@@ -25,6 +21,47 @@ export type ExactSettleFn = (
   requirements: PaymentRequirements,
 ) => Promise<void>;
 
+/** Build the exact payment strategy from verify/settle functions */
+function exactStrategy(verify: ExactVerifyFn, settle: ExactSettleFn): PaymentStrategy<ExactRoutesConfig[string], ExactPayload> {
+  return {
+    scheme: "exact",
+    getPrice: (routeConfig) => parseUsdcAmount(routeConfig.price),
+    castPayload: (decoded) => decoded as unknown as ExactPayload,
+    buildPaymentRequired: buildExactPaymentRequired,
+    verify,
+    buildSettle: (payload, requirements, verification, _request, routeConfig, options) => {
+      const settledAmount = parseUsdcAmount(routeConfig.price);
+      return async (response: Response) => {
+        if (response.status >= 400) {
+          return null;
+        }
+
+        // Record settlement intent before firing (if hook provided)
+        if (options?.onSettlementIntent) {
+          await options.onSettlementIntent({
+            id: crypto.randomUUID(),
+            payload,
+            requirements,
+            settlementAmount: settledAmount,
+            scheme: "exact",
+            createdAt: Date.now(),
+          });
+        }
+
+        // Settle for full price (fire-and-forget — use waitUntil if available for durability)
+        const settlePromise = settle(payload, requirements).catch((err) => {
+          console.error("x402 exact settlement failed:", err);
+        });
+        if (options?.waitUntil) {
+          options.waitUntil(settlePromise);
+        }
+
+        return { settledAmount, payer: verification.payer };
+      };
+    },
+  };
+}
+
 /**
  * Framework-agnostic x402 exact payment processing.
  * Handles route matching, payment extraction, verification, and settlement.
@@ -37,80 +74,9 @@ export async function processExactPayment(
   routes: ExactRoutesConfig,
   verify: ExactVerifyFn,
   settle: ExactSettleFn,
+  options?: MiddlewareOptions,
 ): Promise<PaymentFlowResult> {
-  const routeKey = `${method} ${pathname}`;
-  const routeConfig = routes[routeKey];
-
-  if (!routeConfig) {
-    return { action: "pass" };
-  }
-
-  const asset = routeConfig.asset ?? DEFAULT_USDC_ADDRESSES[routeConfig.network];
-  if (!asset) {
-    return { action: "error", status: 500, body: { error: "Server misconfiguration: no asset for network" } };
-  }
-
-  const paymentHeader = extractPaymentHeader(request);
-
-  if (!paymentHeader) {
-    const paymentRequired = buildExactPaymentRequired(routeConfig, request.url);
-    const encoded = encodeRequirementsHeader(paymentRequired);
-    return { action: "payment_required", response: paymentRequired, encoded };
-  }
-
-  // Decode payment payload
-  let exactPayload: ExactPayload;
-  try {
-    const fullPayload = decodePaymentHeader(paymentHeader);
-    exactPayload = fullPayload.payload as unknown as ExactPayload;
-  } catch {
-    return { action: "error", status: 400, body: { error: "Invalid payment header" } };
-  }
-
-  const requirements: PaymentRequirements = {
-    scheme: "exact",
-    network: routeConfig.network,
-    asset,
-    maxAmount: parseUsdcAmount(routeConfig.price),
-    payTo: routeConfig.payTo,
-    maxTimeoutSeconds: routeConfig.maxTimeoutSeconds ?? 300,
-  };
-
-  // Verify payment authorization
-  const verification = await verify(exactPayload, requirements);
-
-  if (!verification.isValid) {
-    const status = verification.invalidReason === "permit2_allowance_required" ? 412 : 402;
-    const paymentRequired = buildExactPaymentRequired(routeConfig, request.url);
-    const encoded = encodeRequirementsHeader(paymentRequired);
-    return {
-      action: "invalid_payment",
-      status,
-      body: {
-        error: "Payment verification failed",
-        reason: verification.invalidReason,
-        ...paymentRequired,
-      },
-      encoded,
-    };
-  }
-
-  const settledAmount = parseUsdcAmount(routeConfig.price);
-
-  return {
-    action: "verified",
-    payer: verification.payer,
-    settle: async (response: Response) => {
-      if (response.status >= 400) {
-        return null;
-      }
-
-      // Settle for full price (fire-and-forget)
-      settle(exactPayload, requirements).catch(() => {});
-
-      return { settledAmount, payer: verification.payer };
-    },
-  };
+  return processPayment(method, pathname, request, routes, exactStrategy(verify, settle), options);
 }
 
 /**
@@ -121,35 +87,7 @@ export function buildExactMiddleware(
   routes: ExactRoutesConfig,
   verify: ExactVerifyFn,
   settle: ExactSettleFn,
+  options?: MiddlewareOptions,
 ): MiddlewareHandler {
-  return async (c, next) => {
-    const result = await processExactPayment(
-      c.req.method,
-      new URL(c.req.url).pathname,
-      c.req.raw,
-      routes,
-      verify,
-      settle,
-    );
-
-    switch (result.action) {
-      case "pass":
-        return next();
-      case "payment_required":
-        return c.json(result.response, 402, { "PAYMENT-REQUIRED": result.encoded });
-      case "invalid_payment":
-        return c.json(result.body, result.status as 402 | 412, { "PAYMENT-REQUIRED": result.encoded });
-      case "error":
-        return c.json(result.body, result.status as 400 | 500);
-      case "verified": {
-        await next();
-        const settlement = await result.settle(c.res);
-        if (settlement) {
-          c.header("X-Payment-Settled", settlement.settledAmount);
-          c.header("X-Payment-Payer", settlement.payer);
-        }
-        return;
-      }
-    }
-  };
+  return buildMiddleware(routes, exactStrategy(verify, settle), options);
 }

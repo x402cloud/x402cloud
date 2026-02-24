@@ -2146,49 +2146,52 @@ async function runProbes(probes, target) {
 }
 __name(runProbes, "runProbes");
 
-// ../../packages/probes/dist/probes/rpc.js
-var rpcAlive = /* @__PURE__ */ __name(async (target) => {
-  const start = Date.now();
-  try {
+// ../../packages/probes/dist/wrap.js
+function wrapProbe(name, body, timeoutMs = 1e4) {
+  return async (target) => {
+    const start = Date.now();
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1e4);
-    const response = await fetch(target.rpc, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "eth_blockNumber",
-        params: [],
-        id: 1
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    const json = await response.json();
-    if (json.error) {
-      return {
-        name: "rpc-alive",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: json.error.message
-      };
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const result = await body(target, controller.signal);
+      return { ...result, latencyMs: Date.now() - start };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      return { name, status: "fail", latencyMs: Date.now() - start, error: message };
+    } finally {
+      clearTimeout(timer);
     }
-    return {
-      name: "rpc-alive",
-      status: "pass",
-      latencyMs: Date.now() - start,
-      meta: { blockNumber: json.result }
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+  };
+}
+__name(wrapProbe, "wrapProbe");
+
+// ../../packages/probes/dist/probes/rpc.js
+var rpcAlive = wrapProbe("rpc-alive", async (target, signal) => {
+  const response = await fetch(target.rpc, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "eth_blockNumber",
+      params: [],
+      id: 1
+    }),
+    signal
+  });
+  const json = await response.json();
+  if (json.error) {
     return {
       name: "rpc-alive",
       status: "fail",
-      latencyMs: Date.now() - start,
-      error: message
+      error: json.error.message
     };
   }
-}, "rpcAlive");
+  return {
+    name: "rpc-alive",
+    status: "pass",
+    meta: { blockNumber: json.result }
+  };
+});
 
 // ../../packages/probes/dist/probes/usdc.js
 var USDC_ADDRESSES = {
@@ -2196,417 +2199,274 @@ var USDC_ADDRESSES = {
   "eip155:8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 };
 var NAME_SELECTOR = "0x06fdde03";
-var usdcContract = /* @__PURE__ */ __name(async (target) => {
-  const start = Date.now();
+var usdcContract = wrapProbe("usdc-contract", async (target, signal) => {
   const address = USDC_ADDRESSES[target.network];
   if (!address) {
     return {
       name: "usdc-contract",
       status: "skip",
-      latencyMs: Date.now() - start,
       error: `No USDC address for network ${target.network}`
     };
   }
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1e4);
-    const response = await fetch(target.rpc, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "eth_call",
-        params: [{ to: address, data: NAME_SELECTOR }, "latest"],
-        id: 1
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    const json = await response.json();
-    if (json.error) {
-      return {
-        name: "usdc-contract",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: json.error.message,
-        meta: { address, network: target.network }
-      };
-    }
-    return {
-      name: "usdc-contract",
-      status: "pass",
-      latencyMs: Date.now() - start,
-      meta: { address, network: target.network }
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+  const response = await fetch(target.rpc, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "eth_call",
+      params: [{ to: address, data: NAME_SELECTOR }, "latest"],
+      id: 1
+    }),
+    signal
+  });
+  const json = await response.json();
+  if (json.error) {
     return {
       name: "usdc-contract",
       status: "fail",
-      latencyMs: Date.now() - start,
-      error: message,
+      error: json.error.message,
       meta: { address, network: target.network }
     };
   }
-}, "usdcContract");
+  return {
+    name: "usdc-contract",
+    status: "pass",
+    meta: { address, network: target.network }
+  };
+});
 
 // ../../packages/probes/dist/probes/permit2.js
 var PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-var permit2Contract = /* @__PURE__ */ __name(async (target) => {
-  const start = Date.now();
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1e4);
-    const response = await fetch(target.rpc, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "eth_getCode",
-        params: [PERMIT2_ADDRESS, "latest"],
-        id: 1
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    const json = await response.json();
-    if (json.error) {
-      return {
-        name: "permit2-contract",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: json.error.message,
-        meta: { address: PERMIT2_ADDRESS }
-      };
-    }
-    const code = json.result ?? "0x";
-    const codeSize = (code.length - 2) / 2;
-    const hasCode = code.length > 2;
-    return {
-      name: "permit2-contract",
-      status: hasCode ? "pass" : "fail",
-      latencyMs: Date.now() - start,
-      error: hasCode ? void 0 : "No contract code at Permit2 address",
-      meta: { address: PERMIT2_ADDRESS, codeSize }
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+var permit2Contract = wrapProbe("permit2-contract", async (target, signal) => {
+  const response = await fetch(target.rpc, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "eth_getCode",
+      params: [PERMIT2_ADDRESS, "latest"],
+      id: 1
+    }),
+    signal
+  });
+  const json = await response.json();
+  if (json.error) {
     return {
       name: "permit2-contract",
       status: "fail",
-      latencyMs: Date.now() - start,
-      error: message,
+      error: json.error.message,
       meta: { address: PERMIT2_ADDRESS }
     };
   }
-}, "permit2Contract");
+  const code = json.result ?? "0x";
+  const codeSize = (code.length - 2) / 2;
+  const hasCode = code.length > 2;
+  return {
+    name: "permit2-contract",
+    status: hasCode ? "pass" : "fail",
+    error: hasCode ? void 0 : "No contract code at Permit2 address",
+    meta: { address: PERMIT2_ADDRESS, codeSize }
+  };
+});
 
 // ../../packages/probes/dist/probes/facilitator.js
-var facilitatorHealth = /* @__PURE__ */ __name(async (target) => {
-  const start = Date.now();
+var facilitatorHealth = wrapProbe("facilitator-health", async (target, signal) => {
   if (target.facilitator === null) {
-    return { name: "facilitator-health", status: "skip", latencyMs: 0 };
+    return { name: "facilitator-health", status: "skip" };
   }
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1e4);
-    const healthResponse = await fetch(`${target.facilitator}/health`, {
-      signal: controller.signal
-    });
-    if (!healthResponse.ok) {
-      clearTimeout(timeout);
-      return {
-        name: "facilitator-health",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: `Health endpoint returned ${healthResponse.status}`
-      };
-    }
-    const supportedResponse = await fetch(`${target.facilitator}/supported`, {
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    if (!supportedResponse.ok) {
-      return {
-        name: "facilitator-health",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: `Supported endpoint returned ${supportedResponse.status}`
-      };
-    }
-    const supported = await supportedResponse.json();
-    const address = supported.facilitator ?? supported.address ?? "unknown";
-    return {
-      name: "facilitator-health",
-      status: "pass",
-      latencyMs: Date.now() - start,
-      meta: {
-        schemes: supported.schemes ?? [],
-        networks: supported.networks ?? [],
-        address
-      }
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+  const healthResponse = await fetch(`${target.facilitator}/health`, { signal });
+  if (!healthResponse.ok) {
     return {
       name: "facilitator-health",
       status: "fail",
-      latencyMs: Date.now() - start,
-      error: message
+      error: `Health endpoint returned ${healthResponse.status}`
     };
   }
-}, "facilitatorHealth");
+  const supportedResponse = await fetch(`${target.facilitator}/supported`, { signal });
+  if (!supportedResponse.ok) {
+    return {
+      name: "facilitator-health",
+      status: "fail",
+      error: `Supported endpoint returned ${supportedResponse.status}`
+    };
+  }
+  const supported = await supportedResponse.json();
+  const address = supported.facilitator ?? supported.address ?? "unknown";
+  return {
+    name: "facilitator-health",
+    status: "pass",
+    meta: {
+      schemes: supported.schemes ?? [],
+      networks: supported.networks ?? [],
+      address
+    }
+  };
+});
 
 // ../../packages/probes/dist/probes/infer.js
-var inferHealth = /* @__PURE__ */ __name(async (target) => {
-  const start = Date.now();
+var inferHealth = wrapProbe("infer-health", async (target, signal) => {
   if (target.infer === null) {
-    return { name: "infer-health", status: "skip", latencyMs: 0 };
+    return { name: "infer-health", status: "skip" };
   }
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1e4);
-    const response = await fetch(`${target.infer}/health`, {
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    if (!response.ok) {
-      return {
-        name: "infer-health",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: `Health endpoint returned ${response.status}`
-      };
-    }
-    return {
-      name: "infer-health",
-      status: "pass",
-      latencyMs: Date.now() - start
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+  const response = await fetch(`${target.infer}/health`, { signal });
+  if (!response.ok) {
     return {
       name: "infer-health",
       status: "fail",
-      latencyMs: Date.now() - start,
-      error: message
+      error: `Health endpoint returned ${response.status}`
     };
   }
-}, "inferHealth");
-var inferModels = /* @__PURE__ */ __name(async (target) => {
-  const start = Date.now();
+  return { name: "infer-health", status: "pass" };
+});
+var inferModels = wrapProbe("infer-models", async (target, signal) => {
   if (target.infer === null) {
-    return { name: "infer-models", status: "skip", latencyMs: 0 };
+    return { name: "infer-models", status: "skip" };
   }
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1e4);
-    const response = await fetch(`${target.infer}/models`, {
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    if (!response.ok) {
-      return {
-        name: "infer-models",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: `Models endpoint returned ${response.status}`
-      };
-    }
-    const data = await response.json();
-    const models = data.data?.map((m) => m.id) ?? data.models ?? [];
-    return {
-      name: "infer-models",
-      status: "pass",
-      latencyMs: Date.now() - start,
-      meta: { modelCount: models.length, models }
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+  const response = await fetch(`${target.infer}/models`, { signal });
+  if (!response.ok) {
     return {
       name: "infer-models",
       status: "fail",
-      latencyMs: Date.now() - start,
-      error: message
+      error: `Models endpoint returned ${response.status}`
     };
   }
-}, "inferModels");
+  const data = await response.json();
+  const models = data.data?.map((m) => m.id) ?? data.models ?? [];
+  return {
+    name: "infer-models",
+    status: "pass",
+    meta: { modelCount: models.length, models }
+  };
+});
 
 // ../../packages/probes/dist/probes/payment-flow.js
-var paymentFlow = /* @__PURE__ */ __name(async (target) => {
-  const start = Date.now();
+var paymentFlow = wrapProbe("payment-flow", async (target, signal) => {
   if (target.infer === null) {
-    return { name: "payment-flow", status: "skip", latencyMs: 0 };
+    return { name: "payment-flow", status: "skip" };
   }
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1e4);
-    const modelsResponse = await fetch(`${target.infer}/models`, {
-      signal: controller.signal
-    });
-    if (!modelsResponse.ok) {
-      clearTimeout(timeout);
-      return {
-        name: "payment-flow",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: `Could not fetch models: ${modelsResponse.status}`
-      };
-    }
-    const modelsData = await modelsResponse.json();
-    const models = modelsData.data?.map((m) => m.id) ?? modelsData.models ?? [];
-    if (models.length === 0) {
-      clearTimeout(timeout);
-      return {
-        name: "payment-flow",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: "No models available to test payment flow"
-      };
-    }
-    const model = models[0];
-    const inferResponse = await fetch(`${target.infer}/${model}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", content: "test" }] }),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    if (inferResponse.status !== 402) {
-      return {
-        name: "payment-flow",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: `Expected 402, got ${inferResponse.status}`,
-        meta: { statusCode: inferResponse.status }
-      };
-    }
-    const body = await inferResponse.json();
-    const schemesOffered = (body.accepts ?? []).map((a) => a.scheme ?? "unknown");
-    if (!body.x402Version || !body.accepts || body.accepts.length === 0) {
-      return {
-        name: "payment-flow",
-        status: "warn",
-        latencyMs: Date.now() - start,
-        error: "402 response missing x402Version or accepts array",
-        meta: { statusCode: 402, x402Version: body.x402Version, schemesOffered }
-      };
-    }
-    return {
-      name: "payment-flow",
-      status: "pass",
-      latencyMs: Date.now() - start,
-      meta: {
-        statusCode: 402,
-        x402Version: body.x402Version,
-        schemesOffered
-      }
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+  const modelsResponse = await fetch(`${target.infer}/models`, { signal });
+  if (!modelsResponse.ok) {
     return {
       name: "payment-flow",
       status: "fail",
-      latencyMs: Date.now() - start,
-      error: message
+      error: `Could not fetch models: ${modelsResponse.status}`
     };
   }
-}, "paymentFlow");
+  const modelsData = await modelsResponse.json();
+  const models = modelsData.data?.map((m) => m.id) ?? modelsData.models ?? [];
+  if (models.length === 0) {
+    return {
+      name: "payment-flow",
+      status: "fail",
+      error: "No models available to test payment flow"
+    };
+  }
+  const model = models[0];
+  const inferResponse = await fetch(`${target.infer}/${model}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "test" }] }),
+    signal
+  });
+  if (inferResponse.status !== 402) {
+    return {
+      name: "payment-flow",
+      status: "fail",
+      error: `Expected 402, got ${inferResponse.status}`,
+      meta: { statusCode: inferResponse.status }
+    };
+  }
+  const body = await inferResponse.json();
+  const schemesOffered = (body.accepts ?? []).map((a) => a.scheme ?? "unknown");
+  if (!body.x402Version || !body.accepts || body.accepts.length === 0) {
+    return {
+      name: "payment-flow",
+      status: "warn",
+      error: "402 response missing x402Version or accepts array",
+      meta: { statusCode: 402, x402Version: body.x402Version, schemesOffered }
+    };
+  }
+  return {
+    name: "payment-flow",
+    status: "pass",
+    meta: {
+      statusCode: 402,
+      x402Version: body.x402Version,
+      schemesOffered
+    }
+  };
+});
 
 // ../../packages/probes/dist/probes/gas.js
 var MIN_BALANCE_WEI = 1000000000000000n;
-var gasEstimate = /* @__PURE__ */ __name(async (target) => {
-  const start = Date.now();
+var gasEstimate = wrapProbe("gas-estimate", async (target, signal) => {
   if (target.facilitator === null) {
-    return { name: "gas-estimate", status: "skip", latencyMs: 0 };
+    return { name: "gas-estimate", status: "skip" };
   }
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1e4);
-    let address = target.facilitatorAddress;
-    if (!address) {
-      const supportedResponse = await fetch(`${target.facilitator}/supported`, {
-        signal: controller.signal
-      });
-      if (!supportedResponse.ok) {
-        clearTimeout(timeout);
-        return {
-          name: "gas-estimate",
-          status: "fail",
-          latencyMs: Date.now() - start,
-          error: `Could not fetch facilitator address: ${supportedResponse.status}`
-        };
-      }
-      const supported = await supportedResponse.json();
-      address = supported.facilitator ?? supported.address;
-    }
-    if (!address) {
-      clearTimeout(timeout);
+  let address = target.facilitatorAddress;
+  if (!address) {
+    const supportedResponse = await fetch(`${target.facilitator}/supported`, { signal });
+    if (!supportedResponse.ok) {
       return {
         name: "gas-estimate",
         status: "fail",
-        latencyMs: Date.now() - start,
-        error: "Facilitator did not return an address"
+        error: `Could not fetch facilitator address: ${supportedResponse.status}`
       };
     }
-    const balanceResponse = await fetch(target.rpc, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "eth_getBalance",
-        params: [address, "latest"],
-        id: 1
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    const json = await balanceResponse.json();
-    if (json.error) {
-      return {
-        name: "gas-estimate",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: json.error.message,
-        meta: { address }
-      };
-    }
-    const balanceWei = BigInt(json.result ?? "0x0");
-    const balanceEth = formatEth(balanceWei);
-    if (balanceWei === 0n) {
-      return {
-        name: "gas-estimate",
-        status: "fail",
-        latencyMs: Date.now() - start,
-        error: "Facilitator has zero ETH balance",
-        meta: { address, balanceWei: balanceWei.toString(), balanceEth }
-      };
-    }
-    if (balanceWei < MIN_BALANCE_WEI) {
-      return {
-        name: "gas-estimate",
-        status: "warn",
-        latencyMs: Date.now() - start,
-        error: `Facilitator ETH balance is low: ${balanceEth} ETH`,
-        meta: { address, balanceWei: balanceWei.toString(), balanceEth }
-      };
-    }
-    return {
-      name: "gas-estimate",
-      status: "pass",
-      latencyMs: Date.now() - start,
-      meta: { address, balanceWei: balanceWei.toString(), balanceEth }
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+    const supported = await supportedResponse.json();
+    address = supported.facilitator ?? supported.address;
+  }
+  if (!address) {
     return {
       name: "gas-estimate",
       status: "fail",
-      latencyMs: Date.now() - start,
-      error: message
+      error: "Facilitator did not return an address"
     };
   }
-}, "gasEstimate");
+  const balanceResponse = await fetch(target.rpc, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "eth_getBalance",
+      params: [address, "latest"],
+      id: 1
+    }),
+    signal
+  });
+  const json = await balanceResponse.json();
+  if (json.error) {
+    return {
+      name: "gas-estimate",
+      status: "fail",
+      error: json.error.message,
+      meta: { address }
+    };
+  }
+  const balanceWei = BigInt(json.result ?? "0x0");
+  const balanceEth = formatEth(balanceWei);
+  if (balanceWei === 0n) {
+    return {
+      name: "gas-estimate",
+      status: "fail",
+      error: "Facilitator has zero ETH balance",
+      meta: { address, balanceWei: balanceWei.toString(), balanceEth }
+    };
+  }
+  if (balanceWei < MIN_BALANCE_WEI) {
+    return {
+      name: "gas-estimate",
+      status: "warn",
+      error: `Facilitator ETH balance is low: ${balanceEth} ETH`,
+      meta: { address, balanceWei: balanceWei.toString(), balanceEth }
+    };
+  }
+  return {
+    name: "gas-estimate",
+    status: "pass",
+    meta: { address, balanceWei: balanceWei.toString(), balanceEth }
+  };
+});
 function formatEth(wei) {
   const whole = wei / 1000000000000000000n;
   const remainder = wei % 1000000000000000000n;

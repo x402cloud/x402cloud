@@ -69,3 +69,18 @@ export type RouteConfig = {
 };
 
 export type RoutesConfig = Record<string, RouteConfig>;
+
+/** Canonical settlement event emitted after on-chain settlement */
+export type SettlementEvent = {
+  txHash: string;
+  blockNumber: number;
+  timestamp: number;
+  network: string;
+  scheme: string;
+  facilitator: string;
+  payer: string;
+  payee: string;
+  amount: string;
+  amountUsd: number;
+  token: string;
+};

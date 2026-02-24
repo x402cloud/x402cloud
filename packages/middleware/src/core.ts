@@ -1,16 +1,16 @@
 import type { MiddlewareHandler } from "hono";
 import {
-  extractPaymentHeader,
-  decodePaymentHeader,
   parseUsdcAmount,
-  encodeRequirementsHeader,
   type VerifyResponse,
   type PaymentRequirements,
-  type PaymentRequired,
 } from "@x402cloud/protocol";
-import { DEFAULT_USDC_ADDRESSES, type UptoPayload } from "@x402cloud/evm";
+import type { UptoPayload } from "@x402cloud/evm";
 import type { UptoRoutesConfig } from "./types.js";
 import { buildPaymentRequired } from "./response.js";
+import { processPayment, buildMiddleware, type PaymentStrategy, type PaymentFlowResult, type MiddlewareOptions } from "./generic-core.js";
+
+// Re-export PaymentFlowResult for backward compatibility
+export type { PaymentFlowResult } from "./generic-core.js";
 
 /** Verify function: takes payload + requirements, returns verification result */
 export type VerifyFn = (
@@ -25,22 +25,53 @@ export type SettleFn = (
   settlementAmount: string,
 ) => Promise<void>;
 
-/** Result of processing the payment flow, framework-agnostic */
-export type PaymentFlowResult =
-  | { action: "pass" }
-  | { action: "payment_required"; response: PaymentRequired; encoded: string }
-  | { action: "invalid_payment"; status: number; body: object; encoded: string }
-  | { action: "error"; status: number; body: object }
-  | {
-      action: "verified";
-      payer: string;
-      /**
-       * Call after the route handler completes with the handler's response.
-       * Returns settlement headers to set on the response, or null if the
-       * handler returned an error (status >= 400) and settlement was skipped.
-       */
-      settle: (response: Response) => Promise<{ settledAmount: string; payer: string } | null>;
-    };
+/** Build the upto payment strategy from verify/settle functions */
+function uptoStrategy(verify: VerifyFn, settle: SettleFn): PaymentStrategy<UptoRoutesConfig[string], UptoPayload> {
+  return {
+    scheme: "upto",
+    getPrice: (routeConfig) => parseUsdcAmount(routeConfig.maxPrice),
+    castPayload: (decoded) => decoded as unknown as UptoPayload,
+    buildPaymentRequired,
+    verify,
+    buildSettle: (payload, requirements, verification, request, routeConfig, options) => {
+      return async (response: Response) => {
+        if (response.status >= 400) {
+          return null;
+        }
+
+        // Meter actual usage
+        const consumedAmount = await routeConfig.meter({
+          request,
+          response,
+          authorizedAmount: payload.permit2Authorization.permitted.amount,
+          payer: verification.payer,
+        });
+
+        // Record settlement intent before firing (if hook provided)
+        if (options?.onSettlementIntent) {
+          await options.onSettlementIntent({
+            id: crypto.randomUUID(),
+            payload,
+            requirements,
+            settlementAmount: consumedAmount,
+            scheme: "upto",
+            createdAt: Date.now(),
+          });
+        }
+
+        // Settle (fire-and-forget — use waitUntil if available for durability)
+        const settlePromise = settle(payload, requirements, consumedAmount).catch((err) => {
+          console.error("x402 upto settlement failed:", err);
+        });
+        if (options?.waitUntil) {
+          options.waitUntil(settlePromise);
+        }
+
+        return { settledAmount: consumedAmount, payer: verification.payer };
+      };
+    },
+  };
+}
 
 /**
  * Framework-agnostic x402 upto payment processing.
@@ -54,86 +85,9 @@ export async function processUptoPayment(
   routes: UptoRoutesConfig,
   verify: VerifyFn,
   settle: SettleFn,
+  options?: MiddlewareOptions,
 ): Promise<PaymentFlowResult> {
-  const routeKey = `${method} ${pathname}`;
-  const routeConfig = routes[routeKey];
-
-  if (!routeConfig) {
-    return { action: "pass" };
-  }
-
-  const asset = routeConfig.asset ?? DEFAULT_USDC_ADDRESSES[routeConfig.network];
-  if (!asset) {
-    return { action: "error", status: 500, body: { error: "Server misconfiguration: no asset for network" } };
-  }
-
-  const paymentHeader = extractPaymentHeader(request);
-
-  if (!paymentHeader) {
-    const paymentRequired = buildPaymentRequired(routeConfig, request.url);
-    const encoded = encodeRequirementsHeader(paymentRequired);
-    return { action: "payment_required", response: paymentRequired, encoded };
-  }
-
-  // Decode payment payload
-  let uptoPayload: UptoPayload;
-  try {
-    const fullPayload = decodePaymentHeader(paymentHeader);
-    uptoPayload = fullPayload.payload as unknown as UptoPayload;
-  } catch {
-    return { action: "error", status: 400, body: { error: "Invalid payment header" } };
-  }
-
-  const requirements: PaymentRequirements = {
-    scheme: "upto",
-    network: routeConfig.network,
-    asset,
-    maxAmount: parseUsdcAmount(routeConfig.maxPrice),
-    payTo: routeConfig.payTo,
-    maxTimeoutSeconds: routeConfig.maxTimeoutSeconds ?? 300,
-  };
-
-  // Verify payment authorization
-  const verification = await verify(uptoPayload, requirements);
-
-  if (!verification.isValid) {
-    const status = verification.invalidReason === "permit2_allowance_required" ? 412 : 402;
-    const paymentRequired = buildPaymentRequired(routeConfig, request.url);
-    const encoded = encodeRequirementsHeader(paymentRequired);
-    return {
-      action: "invalid_payment",
-      status,
-      body: {
-        error: "Payment verification failed",
-        reason: verification.invalidReason,
-        ...paymentRequired,
-      },
-      encoded,
-    };
-  }
-
-  return {
-    action: "verified",
-    payer: verification.payer,
-    settle: async (response: Response) => {
-      if (response.status >= 400) {
-        return null;
-      }
-
-      // Meter actual usage
-      const consumedAmount = await routeConfig.meter({
-        request,
-        response,
-        authorizedAmount: uptoPayload.permit2Authorization.permitted.amount,
-        payer: verification.payer,
-      });
-
-      // Settle (fire-and-forget)
-      settle(uptoPayload, requirements, consumedAmount).catch(() => {});
-
-      return { settledAmount: consumedAmount, payer: verification.payer };
-    },
-  };
+  return processPayment(method, pathname, request, routes, uptoStrategy(verify, settle), options);
 }
 
 /**
@@ -144,35 +98,7 @@ export function buildUptoMiddleware(
   routes: UptoRoutesConfig,
   verify: VerifyFn,
   settle: SettleFn,
+  options?: MiddlewareOptions,
 ): MiddlewareHandler {
-  return async (c, next) => {
-    const result = await processUptoPayment(
-      c.req.method,
-      new URL(c.req.url).pathname,
-      c.req.raw,
-      routes,
-      verify,
-      settle,
-    );
-
-    switch (result.action) {
-      case "pass":
-        return next();
-      case "payment_required":
-        return c.json(result.response, 402, { "PAYMENT-REQUIRED": result.encoded });
-      case "invalid_payment":
-        return c.json(result.body, result.status as 402 | 412, { "PAYMENT-REQUIRED": result.encoded });
-      case "error":
-        return c.json(result.body, result.status as 400 | 500);
-      case "verified": {
-        await next();
-        const settlement = await result.settle(c.res);
-        if (settlement) {
-          c.header("X-Payment-Settled", settlement.settledAmount);
-          c.header("X-Payment-Payer", settlement.payer);
-        }
-        return;
-      }
-    }
-  };
+  return buildMiddleware(routes, uptoStrategy(verify, settle), options);
 }

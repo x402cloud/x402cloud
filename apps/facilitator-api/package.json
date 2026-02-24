@@ -11,13 +11,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@x402cloud/protocol": "workspace:*",
     "@x402cloud/evm": "workspace:*",
     "@x402cloud/facilitator": "workspace:*",
+    "@x402cloud/protocol": "workspace:*",
     "hono": "^4.7.0",
     "viem": "^2.23.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250214.0",
     "typescript": "^5.7.0",
     "wrangler": "^3.100.0"
   },

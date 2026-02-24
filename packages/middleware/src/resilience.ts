@@ -15,11 +15,14 @@ export type ResilientFetchConfig = {
 
 type CircuitState = "CLOSED" | "OPEN" | "HALF_OPEN";
 
-interface CircuitBreaker {
+export interface CircuitBreaker {
   state: CircuitState;
   failures: number;
   lastFailureTime: number;
 }
+
+/** Events that can trigger a circuit breaker state transition */
+export type BreakerEvent = "success" | "failure" | "attempt";
 
 const DEFAULTS = {
   maxRetries: 2,
@@ -36,11 +39,69 @@ function isRetryable(error: unknown): boolean {
   // Network errors are always retryable
   if (error instanceof TypeError) return true;
   if (error instanceof Error && error.message.includes("fetch")) return true;
-  return true; // Unknown errors default to retryable
+  return false; // Unknown errors are not retryable
 }
 
 function isRetryableStatus(status: number): boolean {
   return status >= 500;
+}
+
+/**
+ * Pure function: compute the next circuit breaker state given the current state, an event,
+ * the failure threshold, the reset window, and the current time.
+ *
+ * Returns a new CircuitBreaker value — never mutates the input.
+ */
+export function nextBreakerState(
+  current: CircuitBreaker,
+  event: BreakerEvent,
+  threshold: number,
+  resetMs: number,
+  now: number,
+): CircuitBreaker {
+  switch (event) {
+    case "success":
+      return { state: "CLOSED", failures: 0, lastFailureTime: current.lastFailureTime };
+
+    case "failure": {
+      const failures = current.failures + 1;
+      const state = failures >= threshold ? "OPEN" : current.state;
+      return { state, failures, lastFailureTime: now };
+    }
+
+    case "attempt": {
+      if (current.state === "CLOSED") {
+        return current; // allowed, no change
+      }
+      if (current.state === "OPEN") {
+        if (now - current.lastFailureTime >= resetMs) {
+          // Transition to HALF_OPEN — allow one probe
+          return { ...current, state: "HALF_OPEN" };
+        }
+        // Still open — caller should reject
+        return current;
+      }
+      // HALF_OPEN — allow one probe, no state change
+      return current;
+    }
+  }
+}
+
+/**
+ * Check whether an attempt is allowed given the current breaker state.
+ * Also returns the (possibly transitioned) breaker state.
+ */
+function checkAttempt(
+  current: CircuitBreaker,
+  threshold: number,
+  resetMs: number,
+  now: number,
+): { allowed: boolean; breaker: CircuitBreaker } {
+  const next = nextBreakerState(current, "attempt", threshold, resetMs, now);
+  if (current.state === "OPEN" && next.state === "OPEN") {
+    return { allowed: false, breaker: next };
+  }
+  return { allowed: true, breaker: next };
 }
 
 /**
@@ -59,41 +120,18 @@ export function createResilientFetch(config?: ResilientFetchConfig): typeof fetc
   const threshold = config?.circuitBreakerThreshold ?? DEFAULTS.circuitBreakerThreshold;
   const resetMs = config?.circuitBreakerResetMs ?? DEFAULTS.circuitBreakerResetMs;
 
-  const breaker: CircuitBreaker = {
+  // Mutable reference — transition logic lives in pure nextBreakerState
+  let breaker: CircuitBreaker = {
     state: "CLOSED",
     failures: 0,
     lastFailureTime: 0,
   };
 
-  function recordSuccess(): void {
-    breaker.failures = 0;
-    breaker.state = "CLOSED";
-  }
-
-  function recordFailure(): void {
-    breaker.failures++;
-    breaker.lastFailureTime = Date.now();
-    if (breaker.failures >= threshold) {
-      breaker.state = "OPEN";
-    }
-  }
-
-  function canAttempt(): boolean {
-    if (breaker.state === "CLOSED") return true;
-    if (breaker.state === "OPEN") {
-      if (Date.now() - breaker.lastFailureTime >= resetMs) {
-        breaker.state = "HALF_OPEN";
-        return true;
-      }
-      return false;
-    }
-    // HALF_OPEN — allow one probe
-    return true;
-  }
-
   const resilientFetch: typeof fetch = async (input, init?) => {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      if (!canAttempt()) {
+      const check = checkAttempt(breaker, threshold, resetMs, Date.now());
+      breaker = check.breaker;
+      if (!check.allowed) {
         throw new Error("Circuit breaker is OPEN — facilitator unavailable");
       }
 
@@ -101,7 +139,7 @@ export function createResilientFetch(config?: ResilientFetchConfig): typeof fetc
         const response = await fetch(input, init);
 
         if (isRetryableStatus(response.status)) {
-          recordFailure();
+          breaker = nextBreakerState(breaker, "failure", threshold, resetMs, Date.now());
           if (attempt < maxRetries) {
             await sleep(retryDelayMs * 2 ** attempt);
             continue;
@@ -111,10 +149,10 @@ export function createResilientFetch(config?: ResilientFetchConfig): typeof fetc
         }
 
         // Success or 4xx (non-retryable) — record success and return
-        recordSuccess();
+        breaker = nextBreakerState(breaker, "success", threshold, resetMs, Date.now());
         return response;
       } catch (error: unknown) {
-        recordFailure();
+        breaker = nextBreakerState(breaker, "failure", threshold, resetMs, Date.now());
         if (!isRetryable(error) || attempt >= maxRetries) {
           throw error;
         }

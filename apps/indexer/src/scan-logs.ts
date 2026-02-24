@@ -1,36 +1,13 @@
-import type { SettlementRecord } from "./types.js";
+import type { SettlementRecord, RpcLog, RpcTransaction, RpcReceipt } from "./types.js";
 import {
   PROXY_ADDRESSES,
-  KNOWN_FACILITATORS,
-  FACILITATOR_NAMES,
   USDC_TRANSFER_TOPIC,
   EXACT_PROXY,
   UPTO_PROXY,
 } from "./constants.js";
-import { rpcCall } from "./rpc.js";
+import { rpcCall, rpcBatch } from "./rpc.js";
 
-type LogEntry = {
-  address: string;
-  topics: string[];
-  data: string;
-  transactionHash: string;
-  blockNumber: string;
-  logIndex: string;
-};
-
-type TxInfo = {
-  from: string;
-  to: string | null;
-  hash: string;
-  gasPrice: string;
-};
-
-type ReceiptInfo = {
-  status: string;
-  gasUsed: string;
-};
-
-function resolveScheme(tx: TxInfo): string {
+function resolveScheme(tx: RpcTransaction): string {
   if (!tx.to) return "unknown";
   const lower = tx.to.toLowerCase();
   if (lower === UPTO_PROXY) return "upto";
@@ -41,21 +18,11 @@ function resolveScheme(tx: TxInfo): string {
 
 /**
  * Determine if a transaction is an x402 settlement:
- * 1. Transaction TO a proxy address (Permit2-based upto/exact)
- * 2. Transaction FROM a known facilitator TO the USDC contract (EIP-3009 exact)
+ * Transaction TO a proxy address (Permit2-based upto/exact).
  */
-function isX402Settlement(tx: TxInfo, usdcAddress: string): boolean {
+function isX402Settlement(tx: RpcTransaction): boolean {
   if (!tx.to) return false;
-  const to = tx.to.toLowerCase();
-  const from = tx.from.toLowerCase();
-
-  // Permit2-based: tx targets a proxy contract
-  if (PROXY_ADDRESSES.includes(to)) return true;
-
-  // EIP-3009: known facilitator calls USDC directly (transferWithAuthorization)
-  if (to === usdcAddress.toLowerCase() && KNOWN_FACILITATORS.includes(from)) return true;
-
-  return false;
+  return PROXY_ADDRESSES.includes(tx.to.toLowerCase());
 }
 
 /**
@@ -77,45 +44,87 @@ export async function scanBlocksViaLogs(
       fromBlock: `0x${fromBlock.toString(16)}`,
       toBlock: `0x${toBlock.toString(16)}`,
     },
-  ])) as LogEntry[];
+  ])) as RpcLog[];
 
   if (!logs || logs.length === 0) return [];
 
   // Deduplicate by txHash
   const uniqueTxHashes = [...new Set(logs.map((l) => l.transactionHash))];
 
-  const records: SettlementRecord[] = [];
+  const BATCH_SIZE = 30;
+
+  // --- Batch 1: Fetch all transactions ---
+  const txByHash = new Map<string, RpcTransaction>();
+  for (let i = 0; i < uniqueTxHashes.length; i += BATCH_SIZE) {
+    const chunk = uniqueTxHashes.slice(i, i + BATCH_SIZE);
+    const results = await rpcBatch(
+      rpcUrl,
+      chunk.map((hash) => ({ method: "eth_getTransactionByHash", params: [hash] })),
+    );
+    for (let j = 0; j < chunk.length; j++) {
+      const tx = results[j] as RpcTransaction | null;
+      if (tx && isX402Settlement(tx)) {
+        txByHash.set(chunk[j], tx);
+      }
+    }
+  }
+
+  if (txByHash.size === 0) return [];
+
+  // --- Batch 2: Fetch receipts for settlement txs only ---
+  const settlementHashes = [...txByHash.keys()];
+  const receiptByHash = new Map<string, RpcReceipt>();
+  for (let i = 0; i < settlementHashes.length; i += BATCH_SIZE) {
+    const chunk = settlementHashes.slice(i, i + BATCH_SIZE);
+    const results = await rpcBatch(
+      rpcUrl,
+      chunk.map((hash) => ({ method: "eth_getTransactionReceipt", params: [hash] })),
+    );
+    for (let j = 0; j < chunk.length; j++) {
+      const receipt = results[j] as RpcReceipt | null;
+      if (receipt && receipt.status === "0x1") {
+        receiptByHash.set(chunk[j], receipt);
+      }
+    }
+  }
+
+  // --- Collect unique block numbers that need timestamps ---
   const blockTimestamps = new Map<string, number>();
+  const neededBlocks = new Set<string>();
+  for (const txHash of receiptByHash.keys()) {
+    const txLogs = logs.filter((l) => l.transactionHash === txHash && l.topics.length >= 3);
+    if (txLogs.length > 0) {
+      neededBlocks.add(txLogs[0].blockNumber);
+    }
+  }
 
-  for (const txHash of uniqueTxHashes) {
-    const tx = (await rpcCall(rpcUrl, "eth_getTransactionByHash", [txHash])) as TxInfo | null;
-    if (!tx) continue;
+  // --- Batch 3: Fetch block timestamps ---
+  const blockArray = [...neededBlocks];
+  for (let i = 0; i < blockArray.length; i += BATCH_SIZE) {
+    const chunk = blockArray.slice(i, i + BATCH_SIZE);
+    const results = await rpcBatch(
+      rpcUrl,
+      chunk.map((blockHex) => ({ method: "eth_getBlockByNumber", params: [blockHex, false] })),
+    );
+    for (let j = 0; j < chunk.length; j++) {
+      const block = results[j] as { timestamp: string } | null;
+      blockTimestamps.set(chunk[j], block ? parseInt(block.timestamp, 16) : 0);
+    }
+  }
 
-    // Check if this is an x402 settlement
-    if (!isX402Settlement(tx, usdcAddress)) continue;
+  // --- Build settlement records ---
+  const records: SettlementRecord[] = [];
+  for (const txHash of receiptByHash.keys()) {
+    const tx = txByHash.get(txHash)!;
+    const receipt = receiptByHash.get(txHash)!;
 
-    // Fetch receipt for gas info and status
-    const receipt = (await rpcCall(rpcUrl, "eth_getTransactionReceipt", [txHash])) as ReceiptInfo | null;
-    if (!receipt || receipt.status !== "0x1") continue;
-
-    // Get Transfer logs for this tx
     const txLogs = logs.filter((l) => l.transactionHash === txHash && l.topics.length >= 3);
     if (txLogs.length === 0) continue;
 
     const blockHex = txLogs[0].blockNumber;
     const blockNumber = parseInt(blockHex, 16);
-
-    // Cache block timestamps
-    if (!blockTimestamps.has(blockHex)) {
-      const block = (await rpcCall(rpcUrl, "eth_getBlockByNumber", [blockHex, false])) as {
-        timestamp: string;
-      } | null;
-      blockTimestamps.set(blockHex, block ? parseInt(block.timestamp, 16) : 0);
-    }
     const timestamp = blockTimestamps.get(blockHex) ?? 0;
-
     const scheme = resolveScheme(tx);
-    const facilitatorName = FACILITATOR_NAMES[tx.from.toLowerCase()] ?? "unknown";
 
     for (const log of txLogs) {
       const payer = "0x" + log.topics[1].slice(26);
@@ -130,7 +139,6 @@ export async function scanBlocksViaLogs(
         network,
         scheme,
         facilitator: tx.from,
-        facilitatorName,
         payer,
         payee,
         amount,
