@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>x402cloud.ai — Open Source x402 Infrastructure</title>
+  <meta name="description" content="The open-source x402 payment standard for the agent economy. Library, facilitator, and services.">
+  <meta property="og:title" content="x402cloud.ai — Open Source x402 Infrastructure">
+  <meta property="og:description" content="Payment infrastructure for the agent economy. Add micropayments to any API with USDC on Base.">
+  <meta property="og:image" content="https://x402cloud.pages.dev/og.png">
+  <meta property="og:url" content="https://x402cloud.ai">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="x402cloud.ai">
+  <meta name="twitter:description" content="Payment infrastructure for the agent economy. Add micropayments to any API with USDC on Base.">
+  <meta name="twitter:image" content="https://x402cloud.pages.dev/og.png">
+  <link rel="canonical" href="https://x402cloud.ai/">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "name": "x402cloud.ai",
+        "url": "https://x402cloud.ai",
+        "description": "Open source x402 payment infrastructure for the agent economy",
+        "sameAs": [
+          "https://github.com/x402cloud/x402cloud",
+          "https://www.npmjs.com/org/x402cloud"
+        ]
+      },
+      {
+        "@type": "WebAPI",
+        "name": "infer.x402cloud.ai — Edge AI Inference",
+        "url": "https://infer.x402cloud.ai",
+        "description": "OpenAI-compatible edge AI inference with x402 micropayments. Llama, DeepSeek, Qwen, Flux models. Pay per call with USDC on Base.",
+        "documentation": "https://infer.x402cloud.ai/llms.txt",
+        "provider": {
+          "@type": "Organization",
+          "name": "x402cloud.ai",
+          "url": "https://x402cloud.ai"
+        }
+      },
+      {
+        "@type": "WebAPI",
+        "name": "facilitator.x402cloud.ai — Payment Facilitator",
+        "url": "https://facilitator.x402cloud.ai",
+        "description": "Hosted x402 payment verification and USDC settlement service. Multi-chain support from 330+ Cloudflare edge cities.",
+        "documentation": "https://facilitator.x402cloud.ai/llms.txt",
+        "provider": {
+          "@type": "Organization",
+          "name": "x402cloud.ai",
+          "url": "https://x402cloud.ai"
+        }
+      }
+    ]
+  }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #060606;
+      --surface: #0a0a0a;
+      --border: #222;
+      --border-dashed: #2a2a2a;
+      --text: #d4d4d4;
+      --text-bright: #ececec;
+      --text-mid: #8a8a8a;
+      --text-dim: #555;
+      --accent: #fff;
+      --mono: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
+      --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-size: 15px;
+      letter-spacing: 0.01em;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Nav ── */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(6, 6, 6, 0.9);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    nav .inner {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 32px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .wordmark {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+    }
+
+    .nav-links { display: flex; gap: 24px; }
+
+    .nav-links a {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-mid);
+      letter-spacing: 0.02em;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--accent); }
+
+    /* ── Hero ── */
+    .hero {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 140px 32px 100px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: start;
+    }
+
+    .hero-text h1 {
+      font-size: 52px;
+      font-weight: 700;
+      line-height: 1.12;
+      letter-spacing: -0.035em;
+      color: var(--text-bright);
+      margin-bottom: 20px;
+    }
+
+    .hero-text h1 .dim { color: var(--text-mid); }
+
+    .hero-text .lead {
+      font-size: 17px;
+      color: var(--text-mid);
+      line-height: 1.8;
+      max-width: 420px;
+      margin-bottom: 32px;
+    }
+
+    .hero-actions { display: flex; gap: 12px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 9px 18px;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      transition: all 0.15s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .btn-primary:hover { background: var(--text); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-mid);
+      border: 1px dashed var(--border-dashed);
+    }
+
+    .btn-ghost:hover {
+      color: var(--text-bright);
+      border-color: var(--text-dim);
+    }
+
+    /* ── Code block ── */
+    .hero-code {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      position: relative;
+    }
+
+    .code-tab {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.04em;
+      padding: 10px 16px;
+      border-bottom: 1px dashed var(--border-dashed);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .code-tab .file { color: var(--text-mid); }
+
+    .code-body {
+      padding: 20px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 2;
+      color: var(--text-mid);
+      overflow-x: auto;
+      tab-size: 2;
+    }
+
+    .code-body .c { color: var(--text-dim); font-style: italic; }
+    .code-body .k { color: var(--text-mid); }
+    .code-body .s { color: #8a8a8a; }
+    .code-body .h { color: var(--text-bright); }
+    .code-body .ln {
+      display: inline-block;
+      width: 24px;
+      color: var(--text-dim);
+      user-select: none;
+      text-align: right;
+      margin-right: 16px;
+      font-size: 11px;
+    }
+
+    /* ── Section ── */
+    section {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 80px 32px;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px dashed var(--border-dashed);
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      color: var(--text-bright);
+      margin-bottom: 10px;
+    }
+
+    .section-desc {
+      font-size: 15px;
+      color: var(--text-mid);
+      max-width: 460px;
+      line-height: 1.8;
+      margin-bottom: 48px;
+    }
+
+    /* ── Protocol flow ── */
+    .protocol-flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1px solid var(--border);
+    }
+
+    .flow-step {
+      padding: 28px 20px;
+      border-right: 1px dashed var(--border-dashed);
+    }
+
+    .flow-step:last-child { border-right: none; }
+
+    .flow-num {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .flow-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin-bottom: 4px;
+    }
+
+    .flow-desc {
+      font-size: 13px;
+      color: var(--text-mid);
+    }
+
+    /* ── Stack ── */
+    .stack-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--border);
+    }
+
+    .stack-card {
+      padding: 32px 28px;
+      border-right: 1px dashed var(--border-dashed);
+    }
+
+    .stack-card:last-child { border-right: none; }
+
+    .stack-num {
+      font-family: var(--mono);
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--border);
+      margin-bottom: 16px;
+      line-height: 1;
+    }
+
+    .stack-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin-bottom: 8px;
+    }
+
+    .stack-card p {
+      font-size: 13px;
+      color: var(--text-mid);
+      line-height: 1.7;
+    }
+
+    /* ── Services ── */
+    .services-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--border);
+    }
+
+    .service-card {
+      padding: 28px;
+      border-right: 1px dashed var(--border-dashed);
+      border-bottom: 1px dashed var(--border-dashed);
+      display: flex;
+      flex-direction: column;
+      transition: background 0.15s;
+    }
+
+    .service-card:nth-child(2n) { border-right: none; }
+    .service-card:nth-last-child(-n+2) { border-bottom: none; }
+
+    .service-card:hover { background: var(--surface); }
+
+    .service-domain {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.02em;
+      margin-bottom: 12px;
+    }
+
+    .service-card h3 {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin-bottom: 6px;
+    }
+
+    .service-card p {
+      font-size: 13px;
+      color: var(--text-mid);
+      line-height: 1.7;
+      flex-grow: 1;
+    }
+
+    .service-tag {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+      border: 1px dashed var(--border-dashed);
+      padding: 3px 10px;
+      margin-top: 16px;
+      width: fit-content;
+    }
+
+    .service-tag.live {
+      color: var(--text-mid);
+      border-style: solid;
+      border-color: var(--text-dim);
+    }
+
+    /* ── Packages ── */
+    .pkg-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      border: 1px solid var(--border);
+    }
+
+    .pkg-item {
+      padding: 24px 16px;
+      border-right: 1px dashed var(--border-dashed);
+      text-align: center;
+    }
+
+    .pkg-item:last-child { border-right: none; }
+
+    .pkg-item .name {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-bright);
+      margin-bottom: 4px;
+    }
+
+    .pkg-item .desc {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* ── Install ── */
+    .install-row {
+      margin-top: 24px;
+      border: 1px dashed var(--border-dashed);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    .install-row .prompt { color: var(--text-dim); }
+    .install-row .cmd { color: var(--text-bright); }
+
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 3px 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .copy-btn:hover { color: var(--text-bright); border-color: var(--text-dim); }
+
+    /* ── Footer ── */
+    footer {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 32px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 40px;
+    }
+
+    footer p {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .footer-links { display: flex; gap: 20px; }
+
+    .footer-links a {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-dim);
+      transition: color 0.15s;
+    }
+
+    .footer-links a:hover { color: var(--text-mid); }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 40px;
+        padding: 110px 24px 64px;
+      }
+      .hero-text h1 { font-size: 40px; }
+      .stack-grid { grid-template-columns: 1fr; }
+      .stack-card { border-right: none; border-bottom: 1px dashed var(--border-dashed); }
+      .stack-card:last-child { border-bottom: none; }
+      .services-grid { grid-template-columns: 1fr; }
+      .service-card { border-right: none !important; border-bottom: 1px dashed var(--border-dashed) !important; }
+      .service-card:last-child { border-bottom: none !important; }
+      .pkg-grid { grid-template-columns: repeat(2, 1fr); }
+      .pkg-item:nth-child(2n) { border-right: none; }
+      .pkg-item { border-bottom: 1px dashed var(--border-dashed); }
+      .protocol-flow { grid-template-columns: 1fr 1fr; }
+      .flow-step { border-bottom: 1px dashed var(--border-dashed); }
+      .flow-step:nth-child(2n) { border-right: none; }
+      section { padding: 56px 24px; }
+      nav .inner { padding: 0 24px; }
+      footer { padding: 24px; flex-direction: column; gap: 16px; }
+    }
+
+    @media (max-width: 500px) {
+      .hero-text h1 { font-size: 32px; }
+      .hero-actions { flex-direction: column; }
+      .pkg-grid { grid-template-columns: 1fr; }
+      .pkg-item { border-right: none; }
+      .protocol-flow { grid-template-columns: 1fr; }
+      .flow-step { border-right: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="inner">
+      <a href="/" class="wordmark">x402cloud.ai</a>
+      <div class="nav-links">
+        <a href="#services">Services</a>
+        <a href="#packages">Packages</a>
+        <a href="https://github.com/x402cloud/x402cloud">GitHub</a>
+        <a href="https://x402cloud.ai/llms.txt">Docs</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <div class="hero-text">
+      <h1>Payment infrastructure<br><span class="dim">for the agent economy</span></h1>
+      <p class="lead">The payment infrastructure for autonomous agents. Add micropayments to any API in minutes. USDC on any chain.</p>
+      <div class="hero-actions">
+        <a href="https://github.com/x402cloud/x402cloud" class="btn btn-primary">View on GitHub</a>
+        <a href="#packages" class="btn btn-ghost">Explore packages</a>
+      </div>
+    </div>
+    <div class="hero-code">
+      <div class="code-tab">
+        <span class="file">server.ts</span>
+        <span>TypeScript</span>
+      </div>
+      <div class="code-body">
+        <div><span class="ln"> 1</span><span class="c">// Add payments to any Hono API</span></div>
+        <div><span class="ln"> 2</span><span class="k">import</span> { <span class="h">uptoPaymentMiddleware</span> } <span class="k">from</span></div>
+        <div><span class="ln"> 3</span>&nbsp;&nbsp;<span class="s">"@x402cloud/middleware"</span></div>
+        <div><span class="ln"> 4</span></div>
+        <div><span class="ln"> 5</span><span class="h">app</span>.use(<span class="s">"/*"</span>, uptoPaymentMiddleware({</div>
+        <div><span class="ln"> 6</span>&nbsp;&nbsp;<span class="s">"POST /api"</span>: {</div>
+        <div><span class="ln"> 7</span>&nbsp;&nbsp;&nbsp;&nbsp;network: <span class="s">"eip155:8453"</span>,</div>
+        <div><span class="ln"> 8</span>&nbsp;&nbsp;&nbsp;&nbsp;maxPrice: <span class="s">"$0.01"</span>,</div>
+        <div><span class="ln"> 9</span>&nbsp;&nbsp;&nbsp;&nbsp;payTo: <span class="s">"0x207C...8E88"</span>,</div>
+        <div><span class="ln">10</span>&nbsp;&nbsp;}</div>
+        <div><span class="ln">11</span>}))</div>
+        <div><span class="ln">12</span></div>
+        <div><span class="ln">13</span><span class="c">// That's it. Your API now accepts USDC.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <section id="how">
+    <div class="section-label">Protocol</div>
+    <div class="section-title">Four steps. No signup.</div>
+    <div class="section-desc">The x402 protocol handles payment negotiation over standard HTTP. Any client that speaks x402 can pay any x402 API.</div>
+    <div class="protocol-flow">
+      <div class="flow-step">
+        <div class="flow-num">Step 01</div>
+        <div class="flow-label">Request</div>
+        <div class="flow-desc">Agent calls your API</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">Step 02</div>
+        <div class="flow-label">402 Response</div>
+        <div class="flow-desc">Server returns price</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">Step 03</div>
+        <div class="flow-label">Sign &amp; Retry</div>
+        <div class="flow-desc">Client signs Permit2 authorization</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">Step 04</div>
+        <div class="flow-label">Settle</div>
+        <div class="flow-desc">On-chain USDC settlement</div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section>
+    <div class="section-label">Architecture</div>
+    <div class="section-title">Everything you need for x402</div>
+    <div class="section-desc">Open source library to add payments. Hosted facilitator to handle settlement. Services your agents can use today.</div>
+    <div class="stack-grid">
+      <div class="stack-card">
+        <div class="stack-num">01</div>
+        <h3>Open Source Library</h3>
+        <p>Add x402 payments to any API. Protocol types, EVM schemes, middleware, client SDK. npm install and go.</p>
+      </div>
+      <div class="stack-card">
+        <div class="stack-num">02</div>
+        <h3>Hosted Facilitator</h3>
+        <p>We handle payment verification and on-chain settlement. Multi-chain. Sub-100ms from 330+ Cloudflare edge cities.</p>
+      </div>
+      <div class="stack-card">
+        <div class="stack-num">03</div>
+        <h3>Agent Services</h3>
+        <p>Ready-to-use x402 APIs. AI inference, agent identity, analytics. Pay per call with USDC, no signup needed.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section id="services">
+    <div class="section-label">Services</div>
+    <div class="section-title">APIs built for agents</div>
+    <div class="section-desc">Every service accepts x402 micropayments. No API keys, no signup. Payment is authentication.</div>
+    <div class="services-grid">
+      <a href="https://github.com/x402cloud/x402cloud" class="service-card">
+        <div class="service-domain">x402cloud.ai</div>
+        <h3>Library</h3>
+        <p>Open source x402 implementation. Protocol types, EVM payment schemes, middleware, client SDK. npm install and go.</p>
+        <span class="service-tag live">Live</span>
+      </a>
+      <a href="https://infer.x402cloud.ai" class="service-card">
+        <div class="service-domain">infer.x402cloud.ai</div>
+        <h3>Inference</h3>
+        <p>Edge AI inference. OpenAI-compatible. Llama, DeepSeek, Qwen, Flux. Pay per token.</p>
+        <span class="service-tag live">Live</span>
+      </a>
+      <a href="https://facilitator.x402cloud.ai" class="service-card">
+        <div class="service-domain">facilitator.x402cloud.ai</div>
+        <h3>Facilitator</h3>
+        <p>Hosted verification and settlement. Base, Ethereum, Arbitrum, Optimism, Polygon.</p>
+        <span class="service-tag live">Live</span>
+      </a>
+      <div class="service-card">
+        <div class="service-domain">identity.x402cloud.ai</div>
+        <h3>Identity</h3>
+        <p>Face verification, liveness detection, proof of humanity, anti-sybil. Pay-per-call biometric APIs.</p>
+        <span class="service-tag">Coming soon</span>
+      </div>
+      <div class="service-card">
+        <div class="service-domain">trust.x402cloud.ai</div>
+        <h3>Reputation</h3>
+        <p>On-chain trust scores for agents and sellers. Built from real x402 settlement history across all facilitators.</p>
+        <span class="service-tag">Coming soon</span>
+      </div>
+      <div class="service-card">
+        <div class="service-domain">wallet.x402cloud.ai</div>
+        <h3>Agent Wallets</h3>
+        <p>Wallet creation, spending limits, budget controls. Multi-sig for agent fleets. Ready-to-go wallets for autonomous agents.</p>
+        <span class="service-tag">Coming soon</span>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section id="packages">
+    <div class="section-label">Packages</div>
+    <div class="section-title">Five packages. Zero lock-in.</div>
+    <div class="section-desc">Everything is open source and modular. Use what you need.</div>
+    <div class="pkg-grid">
+      <div class="pkg-item">
+        <div class="name">protocol</div>
+        <div class="desc">Types &amp; headers</div>
+      </div>
+      <div class="pkg-item">
+        <div class="name">evm</div>
+        <div class="desc">Payment schemes</div>
+      </div>
+      <div class="pkg-item">
+        <div class="name">client</div>
+        <div class="desc">Auto-pay 402s</div>
+      </div>
+      <div class="pkg-item">
+        <div class="name">middleware</div>
+        <div class="desc">Server middleware</div>
+      </div>
+      <div class="pkg-item">
+        <div class="name">facilitator</div>
+        <div class="desc">Verify &amp; settle</div>
+      </div>
+    </div>
+    <div class="install-row">
+      <div>
+        <span class="prompt">$</span>
+        <span class="cmd"> npm install @x402cloud/client</span>
+      </div>
+      <button class="copy-btn" onclick="navigator.clipboard.writeText('npm install @x402cloud/client');this.textContent='copied';setTimeout(()=>this.textContent='copy',1500)">copy</button>
+    </div>
+  </section>
+
+  <footer>
+    <p>x402cloud.ai</p>
+    <div class="footer-links">
+      <a href="https://github.com/x402cloud/x402cloud">GitHub</a>
+      <a href="https://www.npmjs.com/org/x402cloud">npm</a>
+      <a href="https://x402.org">x402 Protocol</a>
+      <a href="https://x402cloud.ai/llms.txt">llms.txt</a>
+    </div>
+  </footer>
+
+</body>
+</html>

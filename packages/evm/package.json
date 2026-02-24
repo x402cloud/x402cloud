@@ -1,0 +1,44 @@
+{
+  "name": "@x402cloud/evm",
+  "version": "0.1.0",
+  "description": "x402 EVM scheme implementations (exact + upto) using Permit2",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@x402cloud/protocol": "workspace:*",
+    "viem": "^2.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "license": "MIT",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x402cloud/x402cloud.git",
+    "directory": "packages/evm"
+  },
+  "homepage": "https://x402cloud.ai",
+  "bugs": {
+    "url": "https://github.com/x402cloud/x402cloud/issues"
+  },
+  "author": "x402cloud.ai",
+  "keywords": ["x402", "micropayments", "usdc", "permit2", "evm", "viem", "blockchain"]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "ML Inference - Deep Reasoning",
+  "description": "Complex reasoning and analysis using DeepSeek R1 Distill 32B. Best for math, logic, multi-step analysis. OpenAI-compatible API.",
+  "jobFee": 0.025,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "type": "object",
+    "properties": {
+      "messages": {
+        "type": "array",
+        "description": "OpenAI-compatible messages array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "role": { "type": "string", "enum": ["system", "user", "assistant"] },
+            "content": { "type": "string" }
+          },
+          "required": ["role", "content"]
+        }
+      }
+    },
+    "required": ["messages"]
+  }
+}

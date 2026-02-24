@@ -1,0 +1,21 @@
+{
+  "name": "ML Inference - Text Embeddings",
+  "description": "High-quality text embeddings using BGE-M3 for RAG, semantic search, and similarity. Returns float arrays.",
+  "jobFee": 0.001,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string",
+        "description": "Text to embed (single string)"
+      },
+      "texts": {
+        "type": "array",
+        "description": "Multiple texts to embed (batch)",
+        "items": { "type": "string" }
+      }
+    }
+  }
+}

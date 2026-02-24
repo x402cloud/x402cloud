@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,276 @@
+# x402cloud.ai
+
+Open source x402 payment infrastructure for the agent economy. Add micropayments to any API with USDC on Base.
+
+## Overview
+
+x402cloud.ai provides the complete stack for HTTP 402 payments:
+
+- **Open source library** — 5 npm packages for protocol types, EVM payment schemes, server middleware, client SDK, and facilitator logic
+- **Hosted facilitator** — On-chain payment verification and USDC settlement at facilitator.x402cloud.ai
+- **Agent services** — Production APIs that accept x402 micropayments (AI inference, more coming)
+
+No API keys. No signup. Payment is authentication.
+
+## How x402 Works
+
+The x402 protocol adds payment negotiation to standard HTTP using the `402 Payment Required` status code:
+
+1. **Request** — Agent sends a normal HTTP request to a paid endpoint
+2. **402 Response** — Server returns HTTP 402 with `X-Payment-Requirements` header containing: price, recipient address, network, scheme, facilitator URL
+3. **Sign & Retry** — Client signs a Permit2 USDC authorization (no on-chain tx yet) and retries the request with an `X-Payment` header containing the signed payload
+4. **Verify** — Server-side middleware sends the payment payload to the facilitator for verification
+5. **Process** — If valid, the server processes the request normally
+6. **Settle** — After a successful response, the middleware calls the facilitator to settle the payment on-chain via Permit2 transfer
+
+Key properties:
+- **Metered (upto) payments**: Client authorizes a max amount, pays only for actual usage (e.g., tokens consumed)
+- **No pre-funding**: Permit2 authorizations are signed off-chain, funds only move on settlement
+- **Atomic**: Payment settles only after successful service delivery
+- **Stateless**: No sessions, no accounts, no databases — just HTTP headers
+
+## Live Services
+
+### infer.x402cloud.ai — Edge AI Inference
+
+OpenAI-compatible AI inference with per-token x402 micropayments. Runs on Cloudflare Workers AI from 330+ edge cities.
+
+- **Base URL**: `https://infer.x402cloud.ai`
+- **Format**: OpenAI chat completions API
+- **Payment**: x402 upto scheme (USDC on Base)
+- **Recipient**: `0x207C6D8f63Bf01F70dc6D372693E8D5943848E88`
+- **Service docs**: https://infer.x402cloud.ai/llms.txt
+- **Models list**: https://infer.x402cloud.ai/models
+
+#### Available Models
+
+| Endpoint | Model | Type | Max Price | Description |
+|----------|-------|------|-----------|-------------|
+| POST /nano | @cf/ibm-granite/granite-4.0-h-micro | text | ~$0.001 | Fastest, simple tasks |
+| POST /fast | @cf/meta/llama-4-scout-17b-16e-instruct | text | ~$0.003 | Quick and capable |
+| POST /smart | @cf/meta/llama-3.1-8b-instruct-fast | text | ~$0.002 | Reliable workhorse |
+| POST /think | @cf/deepseek-ai/deepseek-r1-distill-qwen-32b | text | ~$0.012 | Deep reasoning |
+| POST /code | @cf/qwen/qwen2.5-coder-32b-instruct | text | ~$0.004 | Code specialist |
+| POST /big | @cf/meta/llama-3.3-70b-instruct-fp8-fast | text | ~$0.006 | Highest quality |
+| POST /embed | @cf/baai/bge-m3 | embed | ~$0.001 | Text embeddings |
+| POST /image | @cf/black-forest-labs/flux-1-schnell | image | ~$0.003 | Image generation |
+
+#### Request Format
+
+```json
+POST /fast
+Content-Type: application/json
+
+{
+  "messages": [{"role": "user", "content": "Hello"}],
+  "max_tokens": 512,
+  "temperature": 0.7
+}
+```
+
+#### Response Format (OpenAI-compatible)
+
+```json
+{
+  "id": "chatcmpl-...",
+  "object": "chat.completion",
+  "model": "fast",
+  "choices": [{
+    "index": 0,
+    "message": {"role": "assistant", "content": "..."},
+    "finish_reason": "stop"
+  }],
+  "usage": {"prompt_tokens": 10, "completion_tokens": 50, "total_tokens": 60}
+}
+```
+
+#### Pricing
+
+Cost per neuron: $0.000011. Markup: 1.10x + $0.001 base fee. Uses x402 "upto" metering — you authorize a max price but only pay for actual tokens consumed.
+
+### facilitator.x402cloud.ai — Payment Facilitator
+
+Hosted payment verification and USDC settlement service. Used by x402 middleware to verify payments and settle on-chain without servers needing private keys.
+
+- **Base URL**: `https://facilitator.x402cloud.ai`
+- **Network**: Base Sepolia (eip155:84532) — transitioning to Base mainnet (eip155:8453)
+- **Facilitator address**: `0x207C6D8f63Bf01F70dc6D372693E8D5943848E88`
+- **Service docs**: https://facilitator.x402cloud.ai/llms.txt
+
+#### Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| / | GET | No | Service info and endpoint listing |
+| /health | GET | No | Health check — returns `{"status":"ok"}` |
+| /supported | GET | No | Supported schemes, networks, and facilitator address |
+| /verify | POST | Bearer token | Verify an x402 payment payload against requirements |
+| /settle | POST | Bearer token | Settle a verified payment on-chain via Permit2 |
+
+## npm Packages
+
+All packages are published under the `@x402cloud` npm scope. Install what you need:
+
+### @x402cloud/protocol
+
+Core types and header encoding for the x402 protocol. Zero dependencies.
+
+```
+npm install @x402cloud/protocol
+```
+
+Exports:
+- **Types**: `Network`, `Scheme`, `PaymentRequirements`, `PaymentRequired`, `PaymentPayload`, `VerifyResponse`, `SettleResponse`, `MeterFunction`, `RouteConfig`, `RoutesConfig`
+- **Header functions**: `encodePaymentHeader`, `decodePaymentHeader`, `encodeRequirementsHeader`, `decodeRequirementsHeader`, `extractPaymentHeader`
+- **USDC utilities**: `parseUsdcAmount`, `formatUsdcAmount`
+- **Model registry**: `MODEL_REGISTRY`, `modelKeysOfType`, `ModelType`, `ModelEntry`, `ModelKey`
+
+### @x402cloud/evm
+
+EVM payment scheme implementations using Permit2. Supports "exact" (fixed price) and "upto" (metered) payment schemes.
+
+```
+npm install @x402cloud/evm
+```
+
+Exports:
+- **Upto scheme**: `createUptoPayload`, `verifyUpto`, `settleUpto`
+- **Exact scheme**: `createExactPayload`, `verifyExact`, `settleExact`
+- **Types**: `UptoPayload`, `ExactPayload`, `Permit2Authorization`, `Permit2Witness`, `ClientSigner`, `VerifySigner`, `FacilitatorSigner`
+- **Constants**: Permit2 address, ABI, contract addresses
+- **Utilities**: `parseChainId`
+
+### @x402cloud/client
+
+Client SDK that auto-pays HTTP 402 responses. Wraps `fetch()` to transparently handle payment negotiation.
+
+```
+npm install @x402cloud/client
+```
+
+Exports:
+- `wrapFetchWithPayment` — Wraps fetch to auto-pay 402 responses
+- **Types**: `PaymentClientConfig`, `SchemeHandler`
+
+Usage:
+```typescript
+import { wrapFetchWithPayment } from "@x402cloud/client";
+import { createWalletClient, http } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { base } from "viem/chains";
+
+const account = privateKeyToAccount("0xYOUR_PRIVATE_KEY");
+const walletClient = createWalletClient({ account, chain: base, transport: http() });
+
+const x402Fetch = wrapFetchWithPayment(fetch, walletClient);
+
+const response = await x402Fetch("https://infer.x402cloud.ai/fast", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ messages: [{ role: "user", content: "Hello" }] }),
+});
+```
+
+### @x402cloud/middleware
+
+Hono server middleware for x402 payment gating. Add micropayments to any Hono API.
+
+```
+npm install @x402cloud/middleware
+```
+
+Exports:
+- `uptoPaymentMiddleware` — Local middleware (verifies payments directly)
+- `remoteUptoPaymentMiddleware` — Remote middleware (delegates to a facilitator URL)
+- `buildUptoMiddleware` — Low-level middleware builder
+- `buildPaymentRequired` — Build 402 response manually
+- **Types**: `UptoRouteConfig`, `UptoRoutesConfig`, `VerifyFn`, `SettleFn`
+
+Usage with hosted facilitator:
+```typescript
+import { Hono } from "hono";
+import { remoteUptoPaymentMiddleware } from "@x402cloud/middleware";
+
+const app = new Hono();
+
+app.use("/*", remoteUptoPaymentMiddleware({
+  "POST /api/generate": {
+    network: "eip155:8453",
+    maxPrice: "$0.01",
+    payTo: "0xYOUR_WALLET_ADDRESS",
+    description: "AI text generation",
+  }
+}, "https://facilitator.x402cloud.ai"));
+
+app.post("/api/generate", async (c) => {
+  // This code only runs after payment is verified
+  return c.json({ result: "..." });
+});
+```
+
+### @x402cloud/facilitator
+
+Facilitator core for verifying and settling x402 payments on-chain. Use this to run your own facilitator.
+
+```
+npm install @x402cloud/facilitator
+```
+
+Exports:
+- `createFacilitator` — Create a facilitator instance
+- **Types**: `FacilitatorConfig`, `Facilitator`
+
+Usage:
+```typescript
+import { createFacilitator } from "@x402cloud/facilitator";
+import { base } from "viem/chains";
+
+const facilitator = createFacilitator({
+  privateKey: "0xFACILITATOR_PRIVATE_KEY",
+  rpcUrl: "https://mainnet.base.org",
+  network: "eip155:8453",
+  chain: base,
+});
+
+// Verify a payment
+const result = await facilitator.verify(payload, requirements);
+
+// Settle on-chain
+const settlement = await facilitator.settle(payload, requirements, settlementAmount);
+```
+
+## Contract Addresses
+
+| Contract | Address | Networks |
+|----------|---------|----------|
+| Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` | All EVM chains |
+| USDC (Base) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | Base mainnet |
+| USDC (Base Sepolia) | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | Base Sepolia |
+| x402 Upto Proxy | `0x4020633461b2895a48930Ff97eE8fCdE8E520002` | Base Sepolia |
+| x402 Exact Proxy | `0x4020615294c913F045dc10f0a5cdEbd86c280001` | Base Sepolia |
+
+## Architecture
+
+```
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
+│  Agent / Client  │────▶│  Your API + middleware│────▶│  Facilitator        │
+│  @x402cloud/     │◀────│  @x402cloud/         │◀────│  @x402cloud/        │
+│  client          │     │  middleware           │     │  facilitator        │
+└─────────────────┘     └──────────────────────┘     └─────────────────────┘
+        │                         │                           │
+        │ Signs Permit2           │ Verifies payment          │ Settles on-chain
+        │ (off-chain)             │ via facilitator            │ via Permit2
+        ▼                         ▼                           ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │                    Base (EVM) — USDC                         │
+   └─────────────────────────────────────────────────────────────┘
+```
+
+## Source Code
+
+GitHub: https://github.com/x402cloud/x402cloud
+
+## Related
+
+- x402 Protocol: https://x402.org
+- npm packages: https://www.npmjs.com/org/x402cloud

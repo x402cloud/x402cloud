@@ -1,0 +1,30 @@
+{
+  "name": "ML Inference - Text Generation",
+  "description": "Fast text generation using open-source LLMs (Llama 4, Granite, Llama 3.3 70B). OpenAI-compatible API. Models: nano ($0.01), fast ($0.013), smart ($0.011), big ($0.017).",
+  "jobFee": 0.013,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "type": "object",
+    "properties": {
+      "messages": {
+        "type": "array",
+        "description": "OpenAI-compatible messages array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "role": { "type": "string", "enum": ["system", "user", "assistant"] },
+            "content": { "type": "string" }
+          },
+          "required": ["role", "content"]
+        }
+      },
+      "model": {
+        "type": "string",
+        "enum": ["nano", "fast", "smart", "big"],
+        "description": "Model tier. nano=fastest, fast=capable, smart=reliable, big=highest quality. Default: fast"
+      }
+    },
+    "required": ["messages"]
+  }
+}

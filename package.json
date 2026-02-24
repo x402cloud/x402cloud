@@ -1,0 +1,29 @@
+{
+  "name": "x402cloud",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck",
+    "clean": "turbo clean",
+    "dev": "turbo dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x402cloud/x402cloud.git"
+  },
+  "homepage": "https://x402cloud.ai",
+  "bugs": {
+    "url": "https://github.com/x402cloud/x402cloud/issues"
+  },
+  "author": "x402cloud.ai",
+  "license": "MIT"
+}

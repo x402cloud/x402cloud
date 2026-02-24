@@ -1,0 +1,31 @@
+{
+  "name": "facilitator-api",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Hosted x402 facilitator service at x402cloud.ai",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@x402cloud/protocol": "workspace:*",
+    "@x402cloud/evm": "workspace:*",
+    "@x402cloud/facilitator": "workspace:*",
+    "hono": "^4.7.0",
+    "viem": "^2.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "wrangler": "^3.100.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x402cloud/x402cloud.git",
+    "directory": "apps/facilitator-api"
+  },
+  "author": "x402cloud.ai"
+}

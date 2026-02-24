@@ -1,0 +1,10 @@
+{
+  "name": "site",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler pages deploy . --project-name=x402cloud-site"
+  },
+  "devDependencies": {
+    "wrangler": "^3.100.0"
+  }
+}

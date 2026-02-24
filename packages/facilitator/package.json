@@ -1,0 +1,45 @@
+{
+  "name": "@x402cloud/facilitator",
+  "version": "0.1.0",
+  "description": "x402 facilitator core — verify and settle payments on-chain",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@x402cloud/protocol": "workspace:*",
+    "@x402cloud/evm": "workspace:*",
+    "viem": "^2.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "license": "MIT",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x402cloud/x402cloud.git",
+    "directory": "packages/facilitator"
+  },
+  "homepage": "https://x402cloud.ai",
+  "bugs": {
+    "url": "https://github.com/x402cloud/x402cloud/issues"
+  },
+  "author": "x402cloud.ai",
+  "keywords": ["x402", "micropayments", "usdc", "permit2", "facilitator", "settlement", "payment"]
+}

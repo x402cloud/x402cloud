@@ -1,0 +1,17 @@
+{
+  "name": "ML Inference - Image Generation",
+  "description": "Generate images from text prompts using FLUX.1 Schnell. Returns base64-encoded image.",
+  "jobFee": 0.015,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "type": "object",
+    "properties": {
+      "prompt": {
+        "type": "string",
+        "description": "Text description of the image to generate"
+      }
+    },
+    "required": ["prompt"]
+  }
+}

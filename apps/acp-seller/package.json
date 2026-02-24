@@ -1,0 +1,27 @@
+{
+  "name": "acp-seller",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Virtuals ACP marketplace seller runtime",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@x402cloud/protocol": "workspace:*",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x402cloud/x402cloud.git",
+    "directory": "apps/acp-seller"
+  },
+  "author": "x402cloud.ai"
+}
