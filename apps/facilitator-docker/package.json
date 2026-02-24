@@ -1,0 +1,24 @@
+{
+  "name": "@x402cloud/facilitator-docker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted x402 payment facilitator (Docker)",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@x402cloud/facilitator": "workspace:*",
+    "@x402cloud/protocol": "workspace:*",
+    "@x402cloud/evm": "workspace:*",
+    "@hono/node-server": "^1.14.0",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  }
+}

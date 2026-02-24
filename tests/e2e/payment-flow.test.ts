@@ -20,7 +20,10 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
-import { spawn, type ChildProcess } from "child_process";
+import { spawn, type ChildProcess, execSync } from "child_process";
+import { existsSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 
 import { uptoPaymentMiddleware } from "@x402cloud/middleware";
 import type { UptoRoutesConfig } from "@x402cloud/middleware";
@@ -74,9 +77,25 @@ const transferAbi = [
   ...erc20Abi,
 ] as const;
 
+function findAnvil(): string {
+  // 1. Already in PATH
+  try {
+    return execSync("which anvil", { encoding: "utf-8" }).trim();
+  } catch {}
+
+  // 2. Default Foundry install location
+  const foundryBin = join(homedir(), ".foundry", "bin", "anvil");
+  if (existsSync(foundryBin)) return foundryBin;
+
+  throw new Error(
+    "anvil not found. Install Foundry: curl -L https://foundry.paradigm.xyz | bash && foundryup"
+  );
+}
+
 function startAnvil(): Promise<ChildProcess> {
+  const anvilBin = findAnvil();
   return new Promise((resolve, reject) => {
-    const proc = spawn("anvil", [
+    const proc = spawn(anvilBin, [
       "--fork-url", RPC_URL,
       "--port", String(ANVIL_PORT),
       "--silent",

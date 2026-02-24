@@ -96,11 +96,12 @@ footer a{color:var(--dim);transition:color .15s}footer a:hover{color:var(--mid)}
 </style></head><body>
 <div class="w">
 <h1>infer.x402cloud.ai</h1>
-<p class="sub">Edge AI inference with x402 micropayments. OpenAI-compatible. Pay per token with USDC — no signup, no API keys.</p>
+<p class="sub">Permissionless AI inference with x402 micropayments. No signup. No KYC. No API keys. Pay per token with USDC on Base.</p>
 <div class="links">
 <a href="/models">Models API</a>
 <a href="/llms.txt">llms.txt</a>
 <a href="https://x402cloud.ai/llms.txt">Full Docs</a>
+<a href="https://x402.org">x402 Standard</a>
 <a href="https://github.com/x402cloud/x402cloud">GitHub</a>
 </div>
 
@@ -134,11 +135,13 @@ ${modelRows}
 
   return c.json({
     name: "infer.x402cloud.ai",
-    description: "Edge AI Inference with per-token x402 micropayments",
+    description: "Permissionless AI inference with x402 micropayments. No signup. No KYC. No API keys.",
     docs: "https://infer.x402cloud.ai/llms.txt",
     models_url: "https://infer.x402cloud.ai/models",
     payment: "x402 upto (USDC on Base)",
     recipient: SERVER_ADDRESS,
+    client_sdk: "npm install @x402cloud/client",
+    x402_standard: "https://x402.org",
     models: Object.fromEntries(
       Object.entries(MODELS).map(([k, v]) => [
         k,
@@ -269,7 +272,7 @@ app.get("/openapi.json", (c) => {
       network: "Base (EIP-155:8453)",
       currency: "USDC",
       recipient: SERVER_ADDRESS,
-      facilitator: "https://x402.org/facilitator",
+      facilitator: "https://facilitator.x402cloud.ai",
     },
   });
 });

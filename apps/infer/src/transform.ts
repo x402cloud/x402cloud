@@ -68,15 +68,22 @@ export function toOpenAIModelList(models: Record<string, ModelConfig>) {
 export function toLlmsTxt(models: Record<string, ModelConfig>, recipient: string): string {
   return `# infer.x402cloud.ai
 
-Edge AI inference with x402 micropayments. Pay per token with USDC — no signup, no API keys.
+Permissionless AI inference with x402 micropayments. No signup. No KYC. No API keys. Pay per token with USDC on Base.
+
+> x402cloud.ai is a managed infrastructure provider for the open x402 protocol (https://x402.org).
 
 ## Usage
 
 OpenAI-compatible. Set base_url to https://infer.x402cloud.ai and POST to any model endpoint.
 
+## Client SDK
+
+npm install @x402cloud/client — handles the full 402 payment flow automatically.
+
 ## Payment Scheme
 
 Uses x402 "upto" (metered) payments: authorize a max amount, pay only for actual tokens used.
+Gas paid by facilitator, not caller.
 
 ## Models
 
@@ -93,7 +100,7 @@ POST /{model} with JSON body:
 
 ## Payment
 
-x402 protocol — USDC on Base. Include payment header automatically via x402 client.
+x402 protocol — USDC on Base. Include payment header automatically via @x402cloud/client.
 Recipient: ${recipient}
 `;
 }

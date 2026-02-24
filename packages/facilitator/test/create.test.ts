@@ -12,6 +12,13 @@ vi.mock("@x402cloud/evm", () => ({
     network: "eip155:84532",
     settledAmount: "5000",
   })),
+  verifyExact: vi.fn(async () => ({ isValid: true, payer: "0xPayer" })),
+  settleExact: vi.fn(async () => ({
+    success: true,
+    transaction: "0xtxhash",
+    network: "eip155:84532",
+    settledAmount: "10000",
+  })),
 }));
 
 // Mock viem to avoid real network calls
@@ -43,6 +50,25 @@ const testConfig: FacilitatorConfig = {
   chain: baseSepolia,
 };
 
+const mockPayload = {
+  signature: "0xsig" as `0x${string}`,
+  permit2Authorization: {} as any,
+};
+
+const mockRequirements = {
+  scheme: "upto" as const,
+  network: "eip155:84532" as const,
+  asset: "0xUSDC",
+  maxAmount: "10000",
+  payTo: "0xRecipient",
+  maxTimeoutSeconds: 300,
+};
+
+const mockExactRequirements = {
+  ...mockRequirements,
+  scheme: "exact" as const,
+};
+
 describe("createFacilitator", () => {
   it("returns object with correct shape", () => {
     const facilitator = createFacilitator(testConfig);
@@ -51,8 +77,12 @@ describe("createFacilitator", () => {
     expect(facilitator).toHaveProperty("network");
     expect(facilitator).toHaveProperty("verify");
     expect(facilitator).toHaveProperty("settle");
+    expect(facilitator).toHaveProperty("verifyExact");
+    expect(facilitator).toHaveProperty("settleExact");
     expect(typeof facilitator.verify).toBe("function");
     expect(typeof facilitator.settle).toBe("function");
+    expect(typeof facilitator.verifyExact).toBe("function");
+    expect(typeof facilitator.settleExact).toBe("function");
   });
 
   it("derives correct address from private key", () => {
@@ -69,23 +99,10 @@ describe("createFacilitator", () => {
     const { verifyUpto } = await import("@x402cloud/evm");
     const facilitator = createFacilitator(testConfig);
 
-    const mockPayload = {
-      signature: "0xsig" as `0x${string}`,
-      permit2Authorization: {} as any,
-    };
-    const mockRequirements = {
-      scheme: "upto" as const,
-      network: "eip155:84532" as const,
-      asset: "0xUSDC",
-      maxAmount: "10000",
-      payTo: "0xRecipient",
-      maxTimeoutSeconds: 300,
-    };
-
     const result = await facilitator.verify(mockPayload, mockRequirements);
     expect(result.isValid).toBe(true);
     expect(verifyUpto).toHaveBeenCalledWith(
-      expect.anything(), // the signer
+      expect.anything(),
       mockPayload,
       mockRequirements,
     );
@@ -95,26 +112,39 @@ describe("createFacilitator", () => {
     const { settleUpto } = await import("@x402cloud/evm");
     const facilitator = createFacilitator(testConfig);
 
-    const mockPayload = {
-      signature: "0xsig" as `0x${string}`,
-      permit2Authorization: {} as any,
-    };
-    const mockRequirements = {
-      scheme: "upto" as const,
-      network: "eip155:84532" as const,
-      asset: "0xUSDC",
-      maxAmount: "10000",
-      payTo: "0xRecipient",
-      maxTimeoutSeconds: 300,
-    };
-
     const result = await facilitator.settle(mockPayload, mockRequirements, "5000");
     expect(result.success).toBe(true);
     expect(settleUpto).toHaveBeenCalledWith(
-      expect.anything(), // the signer
+      expect.anything(),
       mockPayload,
       mockRequirements,
       "5000",
+    );
+  });
+
+  it("verifyExact delegates to verifyExact from evm", async () => {
+    const { verifyExact } = await import("@x402cloud/evm");
+    const facilitator = createFacilitator(testConfig);
+
+    const result = await facilitator.verifyExact(mockPayload, mockExactRequirements);
+    expect(result.isValid).toBe(true);
+    expect(verifyExact).toHaveBeenCalledWith(
+      expect.anything(),
+      mockPayload,
+      mockExactRequirements,
+    );
+  });
+
+  it("settleExact delegates to settleExact from evm", async () => {
+    const { settleExact } = await import("@x402cloud/evm");
+    const facilitator = createFacilitator(testConfig);
+
+    const result = await facilitator.settleExact(mockPayload, mockExactRequirements);
+    expect(result.success).toBe(true);
+    expect(settleExact).toHaveBeenCalledWith(
+      expect.anything(),
+      mockPayload,
+      mockExactRequirements,
     );
   });
 });

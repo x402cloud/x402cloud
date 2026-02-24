@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { createFacilitator, type Facilitator } from "@x402cloud/facilitator";
 import type { Network, PaymentRequirements } from "@x402cloud/protocol";
-import { CHAINS, type UptoPayload } from "@x402cloud/evm";
+import { CHAINS, type UptoPayload, type ExactPayload } from "@x402cloud/evm";
 
 type Bindings = {
   FACILITATOR_PRIVATE_KEY: string;
@@ -88,7 +88,7 @@ footer a{color:var(--dim);transition:color .15s}footer a:hover{color:var(--mid)}
 <div class="info-item"><div class="info-label">Network</div><div class="info-value">${c.env.NETWORK}</div></div>
 <div class="info-item"><div class="info-label">Address</div><div class="info-value"><code>${c.env.OUR_ADDRESS.slice(0, 6)}...${c.env.OUR_ADDRESS.slice(-4)}</code></div></div>
 <div class="info-item"><div class="info-label">Token</div><div class="info-value">USDC</div></div>
-<div class="info-item"><div class="info-label">Scheme</div><div class="info-value">upto (metered)</div></div>
+<div class="info-item"><div class="info-label">Schemes</div><div class="info-value">exact + upto</div></div>
 </div>
 
 <h2>Endpoints</h2>
@@ -97,20 +97,28 @@ footer a{color:var(--dim);transition:color .15s}footer a:hover{color:var(--mid)}
 <tr><td><code>/</code></td><td>GET</td><td></td><td>Service info and endpoint listing</td></tr>
 <tr><td><code>/health</code></td><td>GET</td><td></td><td>Health check</td></tr>
 <tr><td><code>/supported</code></td><td>GET</td><td></td><td>Supported schemes, networks, facilitator address</td></tr>
-<tr><td><code>/verify</code></td><td>POST</td><td><span class="tag yes">Bearer</span></td><td>Verify x402 payment payload</td></tr>
-<tr><td><code>/settle</code></td><td>POST</td><td><span class="tag yes">Bearer</span></td><td>Settle verified payment on-chain</td></tr>
+<tr><td><code>/verify</code></td><td>POST</td><td><span class="tag yes">Bearer</span></td><td>Verify upto payment payload</td></tr>
+<tr><td><code>/settle</code></td><td>POST</td><td><span class="tag yes">Bearer</span></td><td>Settle upto payment on-chain</td></tr>
+<tr><td><code>/verify-exact</code></td><td>POST</td><td><span class="tag yes">Bearer</span></td><td>Verify exact payment payload</td></tr>
+<tr><td><code>/settle-exact</code></td><td>POST</td><td><span class="tag yes">Bearer</span></td><td>Settle exact payment on-chain</td></tr>
 </table>
 
 <h2>Integration</h2>
-<div class="code-block">import { remoteUptoPaymentMiddleware } from "@x402cloud/middleware";
+<div class="code-block">import { remoteExactPaymentMiddleware } from "@x402cloud/middleware";
 
-app.use("/*", remoteUptoPaymentMiddleware({
+app.use("/*", remoteExactPaymentMiddleware({
   "POST /api": {
     network: "eip155:8453",
-    maxPrice: "$0.01",
+    price: "$0.01",
     payTo: "0xYOUR_ADDRESS",
   }
 }, "https://facilitator.x402cloud.ai"));</div>
+
+<h2>Self-Host</h2>
+<div class="code-block">docker run -e FACILITATOR_PRIVATE_KEY=0x... \\
+  -e RPC_URL=https://mainnet.base.org \\
+  -e NETWORK=eip155:8453 \\
+  -p 3000:3000 ghcr.io/x402cloud/facilitator</div>
 
 <h2>How It Works</h2>
 <table>
@@ -118,9 +126,9 @@ app.use("/*", remoteUptoPaymentMiddleware({
 <tr><td>1</td><td>Client sends request without payment</td><td>Agent</td></tr>
 <tr><td>2</td><td>Middleware returns 402 with price and facilitator URL</td><td>Your server</td></tr>
 <tr><td>3</td><td>Client signs Permit2 USDC authorization (off-chain)</td><td>Agent</td></tr>
-<tr><td>4</td><td>Middleware sends payload to <code>/verify</code></td><td>Facilitator</td></tr>
+<tr><td>4</td><td>Middleware sends payload to <code>/verify</code> or <code>/verify-exact</code></td><td>Facilitator</td></tr>
 <tr><td>5</td><td>Server processes request</td><td>Your server</td></tr>
-<tr><td>6</td><td>Middleware sends to <code>/settle</code> — USDC moves on-chain</td><td>Facilitator</td></tr>
+<tr><td>6</td><td>Middleware sends to <code>/settle</code> or <code>/settle-exact</code> — USDC moves on-chain</td><td>Facilitator</td></tr>
 </table>
 
 <footer>
@@ -137,14 +145,16 @@ app.use("/*", remoteUptoPaymentMiddleware({
     docs: "https://facilitator.x402cloud.ai/llms.txt",
     health: "https://facilitator.x402cloud.ai/health",
     supported_url: "https://facilitator.x402cloud.ai/supported",
-    payment: "x402 upto (USDC on Base)",
+    payment: "x402 exact + upto (USDC on Base)",
     facilitator: c.env.OUR_ADDRESS,
     network: c.env.NETWORK,
     endpoints: {
       "/health": { method: "GET", auth: false, description: "Health check" },
       "/supported": { method: "GET", auth: false, description: "Supported schemes, networks, and facilitator address" },
-      "/verify": { method: "POST", auth: true, description: "Verify an x402 payment payload against requirements" },
-      "/settle": { method: "POST", auth: true, description: "Settle a verified payment on-chain" },
+      "/verify": { method: "POST", auth: true, description: "Verify an upto payment payload" },
+      "/settle": { method: "POST", auth: true, description: "Settle an upto payment on-chain" },
+      "/verify-exact": { method: "POST", auth: true, description: "Verify an exact payment payload" },
+      "/settle-exact": { method: "POST", auth: true, description: "Settle an exact payment on-chain" },
     },
   });
 });
@@ -158,11 +168,19 @@ x402 payment facilitator — verify and settle USDC micropayments on-chain.
 
 A hosted facilitator service for the x402 payment protocol. It verifies Permit2-signed USDC payments and settles them on-chain. Used by x402 middleware to handle payment verification without servers needing private keys.
 
+Supports both exact (fixed-price) and upto (metered) payment schemes.
+
+## Self-Host
+
+This facilitator is also available as a Docker image for self-hosting:
+docker run -e FACILITATOR_PRIVATE_KEY=0x... -e RPC_URL=https://mainnet.base.org -e NETWORK=eip155:8453 -p 3000:3000 ghcr.io/x402cloud/facilitator
+
 ## Network
 
 - Network: ${c.env.NETWORK}
 - Facilitator address: ${c.env.OUR_ADDRESS}
 - Token: USDC
+- Schemes: exact, upto
 
 ## Endpoints
 
@@ -173,7 +191,7 @@ Health check. Returns {"status":"ok"}.
 Returns supported schemes, networks, and facilitator address. No auth required.
 
 ### POST /verify (auth required)
-Verify an x402 payment payload against requirements.
+Verify an upto payment payload against requirements.
 Request body:
 \`\`\`json
 { "payload": { ... }, "requirements": { ... } }
@@ -181,10 +199,26 @@ Request body:
 Returns: { "isValid": true } or { "isValid": false, "invalidReason": "..." }
 
 ### POST /settle (auth required)
-Settle a verified payment on-chain.
+Settle an upto payment on-chain.
 Request body:
 \`\`\`json
 { "payload": { ... }, "requirements": { ... }, "settlementAmount": "1000000" }
+\`\`\`
+Returns: { "success": true, "txHash": "0x..." } or { "success": false, "errorReason": "..." }
+
+### POST /verify-exact (auth required)
+Verify an exact (fixed-price) payment payload against requirements.
+Request body:
+\`\`\`json
+{ "payload": { ... }, "requirements": { ... } }
+\`\`\`
+Returns: { "isValid": true } or { "isValid": false, "invalidReason": "..." }
+
+### POST /settle-exact (auth required)
+Settle an exact payment on-chain (full authorized amount).
+Request body:
+\`\`\`json
+{ "payload": { ... }, "requirements": { ... } }
 \`\`\`
 Returns: { "success": true, "txHash": "0x..." } or { "success": false, "errorReason": "..." }
 
@@ -192,11 +226,11 @@ Returns: { "success": true, "txHash": "0x..." } or { "success": false, "errorRea
 
 Servers use @x402cloud/middleware with a facilitator URL:
 \`\`\`typescript
-import { remoteUptoPaymentMiddleware } from "@x402cloud/middleware";
-app.use("/*", remoteUptoPaymentMiddleware(routes, "https://facilitator.x402cloud.ai"));
+import { remoteExactPaymentMiddleware } from "@x402cloud/middleware";
+app.use("/*", remoteExactPaymentMiddleware(routes, "https://facilitator.x402cloud.ai"));
 \`\`\`
 
-The middleware calls /verify on each request and /settle after successful responses.
+The middleware calls /verify-exact on each request and /settle-exact after successful responses.
 
 ## Source
 
@@ -228,8 +262,10 @@ app.get("/.well-known/agent-card.json", (c) => {
     defaultInputModes: ["application/json"],
     defaultOutputModes: ["application/json"],
     skills: [
-      { id: "verify", name: "Verify Payment", description: "Verify an x402 payment payload against requirements" },
-      { id: "settle", name: "Settle Payment", description: "Settle a verified payment on-chain via Permit2" },
+      { id: "verify", name: "Verify Upto Payment", description: "Verify an upto payment payload" },
+      { id: "settle", name: "Settle Upto Payment", description: "Settle an upto payment on-chain via Permit2" },
+      { id: "verify-exact", name: "Verify Exact Payment", description: "Verify an exact (fixed-price) payment payload" },
+      { id: "settle-exact", name: "Settle Exact Payment", description: "Settle an exact payment on-chain via Permit2" },
     ],
     authentication: { schemes: ["bearer"] },
     documentationUrl: "https://facilitator.x402cloud.ai/llms.txt",
@@ -250,29 +286,27 @@ app.get("/.well-known/api-catalog", (c) => {
 // ── Supported ────────────────────────────────────────────────────────
 app.get("/supported", (c) => {
   return c.json({
-    schemes: ["upto"],
+    schemes: ["exact", "upto"],
     networks: [c.env.NETWORK],
     facilitator: c.env.OUR_ADDRESS,
   });
 });
 
-// ── Auth middleware for /verify and /settle ──────────────────────────
-app.use("/verify", async (c, next) => {
+// ── Auth middleware for protected endpoints ───────────────────────────
+const authMiddleware = async (c: any, next: any) => {
   const auth = c.req.header("Authorization");
   if (!auth || auth !== `Bearer ${c.env.FACILITATOR_API_TOKEN}`) {
     return c.json({ error: "unauthorized" }, 401);
   }
   await next();
-});
-app.use("/settle", async (c, next) => {
-  const auth = c.req.header("Authorization");
-  if (!auth || auth !== `Bearer ${c.env.FACILITATOR_API_TOKEN}`) {
-    return c.json({ error: "unauthorized" }, 401);
-  }
-  await next();
-});
+};
 
-// ── Verify ───────────────────────────────────────────────────────────
+app.use("/verify", authMiddleware);
+app.use("/settle", authMiddleware);
+app.use("/verify-exact", authMiddleware);
+app.use("/settle-exact", authMiddleware);
+
+// ── Upto: Verify ────────────────────────────────────────────────────
 app.post("/verify", async (c) => {
   const body = await c.req.json<{
     payload: UptoPayload;
@@ -288,7 +322,7 @@ app.post("/verify", async (c) => {
   return c.json(result);
 });
 
-// ── Settle ───────────────────────────────────────────────────────────
+// ── Upto: Settle ────────────────────────────────────────────────────
 app.post("/settle", async (c) => {
   const body = await c.req.json<{
     payload: UptoPayload;
@@ -302,6 +336,38 @@ app.post("/settle", async (c) => {
 
   const f = getFacilitator(c.env);
   const result = await f.settle(body.payload, body.requirements, body.settlementAmount);
+  return c.json(result);
+});
+
+// ── Exact: Verify ───────────────────────────────────────────────────
+app.post("/verify-exact", async (c) => {
+  const body = await c.req.json<{
+    payload: ExactPayload;
+    requirements: PaymentRequirements;
+  }>();
+
+  if (!body.payload || !body.requirements) {
+    return c.json({ isValid: false, invalidReason: "missing payload or requirements" }, 400);
+  }
+
+  const f = getFacilitator(c.env);
+  const result = await f.verifyExact(body.payload, body.requirements);
+  return c.json(result);
+});
+
+// ── Exact: Settle ───────────────────────────────────────────────────
+app.post("/settle-exact", async (c) => {
+  const body = await c.req.json<{
+    payload: ExactPayload;
+    requirements: PaymentRequirements;
+  }>();
+
+  if (!body.payload || !body.requirements) {
+    return c.json({ success: false, errorReason: "missing payload or requirements" }, 400);
+  }
+
+  const f = getFacilitator(c.env);
+  const result = await f.settleExact(body.payload, body.requirements);
   return c.json(result);
 });
 

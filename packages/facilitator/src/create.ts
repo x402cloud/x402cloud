@@ -12,6 +12,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   verifyUpto,
   settleUpto,
+  verifyExact as verifyExactEvm,
+  settleExact as settleExactEvm,
   type FacilitatorSigner,
 } from "@x402cloud/evm";
 import type { FacilitatorConfig, Facilitator } from "./types.js";
@@ -65,6 +67,7 @@ function buildSigner(
 
 /**
  * Create a facilitator instance that can verify and settle x402 payments.
+ * Supports both upto (metered) and exact (fixed-price) schemes.
  * The facilitator holds a private key to submit settlement transactions on-chain.
  */
 export function createFacilitator(config: FacilitatorConfig): Facilitator {
@@ -98,6 +101,14 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
 
     async settle(payload, requirements, settlementAmount) {
       return settleUpto(signer, payload, requirements, settlementAmount);
+    },
+
+    async verifyExact(payload, requirements) {
+      return verifyExactEvm(signer, payload, requirements);
+    },
+
+    async settleExact(payload, requirements) {
+      return settleExactEvm(signer, payload, requirements);
     },
   };
 }
