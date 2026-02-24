@@ -37,8 +37,7 @@ import type { PaymentRequired, MeterFunction } from "@x402cloud/protocol";
 const NETWORK = "eip155:84532" as const;
 const USDC = DEFAULT_USDC_ADDRESSES[NETWORK];
 const PAY_TO = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88";
-const RPC_URL = process.env.RPC_URL;
-if (!RPC_URL) throw new Error("RPC_URL env var required");
+const RPC_URL = process.env.RPC_URL ?? "https://sepolia.base.org";
 const ANVIL_PORT = 8546;
 const ANVIL_RPC = `http://127.0.0.1:${ANVIL_PORT}`;
 

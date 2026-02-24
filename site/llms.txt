@@ -149,7 +149,7 @@ npm install @x402cloud/client
 ```
 
 Exports:
-- `wrapFetchWithPayment` — Wraps fetch to auto-pay 402 responses
+- `wrapFetchWithPayment(config)` — Wraps fetch to auto-pay 402 responses
 - **Types**: `PaymentClientConfig`, `SchemeHandler`
 
 Usage:
@@ -162,7 +162,7 @@ import { base } from "viem/chains";
 const account = privateKeyToAccount("0xYOUR_PRIVATE_KEY");
 const walletClient = createWalletClient({ account, chain: base, transport: http() });
 
-const x402Fetch = wrapFetchWithPayment(fetch, walletClient);
+const x402Fetch = wrapFetchWithPayment({ signer: walletClient });
 
 const response = await x402Fetch("https://infer.x402cloud.ai/fast", {
   method: "POST",

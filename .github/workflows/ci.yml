@@ -46,4 +46,3 @@ jobs:
         env:
           TEST_PRIVATE_KEY: ${{ secrets.TEST_PRIVATE_KEY }}
           FACILITATOR_PRIVATE_KEY: ${{ secrets.FACILITATOR_PRIVATE_KEY }}
-          RPC_URL: ${{ secrets.RPC_URL }}

@@ -23,9 +23,9 @@ const paidRoutes = {
     maxPrice: "$0.10",
     payTo: "0xYOUR_WALLET_ADDRESS",
     description: "AI generation endpoint",
-    meter: (_req: Request, res: Response) => {
+    meter: (ctx) => {
       // Meter based on response size — charge per KB
-      const contentLength = Number(res.headers.get("content-length") ?? 0);
+      const contentLength = Number(ctx.response.headers.get("content-length") ?? 0);
       const kb = Math.ceil(contentLength / 1024);
       return `$${(kb * 0.001).toFixed(6)}`;
     },
