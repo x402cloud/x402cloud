@@ -7,7 +7,12 @@ import {
 } from "./constants.js";
 import { rpcCall, rpcBatch } from "./rpc.js";
 
-function resolveScheme(tx: RpcTransaction): string {
+/**
+ * Classify a settlement transaction by its destination contract.
+ * Returns "upto" for the Permit2 upto proxy, "exact" for the exact proxy or
+ * EIP-3009 transferWithAuthorization path, or "unknown" when `tx.to` is absent.
+ */
+export function resolveScheme(tx: RpcTransaction): string {
   if (!tx.to) return "unknown";
   const lower = tx.to.toLowerCase();
   if (lower === UPTO_PROXY) return "upto";
@@ -20,7 +25,7 @@ function resolveScheme(tx: RpcTransaction): string {
  * Determine if a transaction is an x402 settlement:
  * Transaction TO a proxy address (Permit2-based upto/exact).
  */
-function isX402Settlement(tx: RpcTransaction): boolean {
+export function isX402Settlement(tx: RpcTransaction): boolean {
   if (!tx.to) return false;
   return PROXY_ADDRESSES.includes(tx.to.toLowerCase());
 }
