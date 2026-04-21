@@ -3,10 +3,12 @@ import {
   createWalletClient,
   http,
   verifyTypedData as viemVerifyTypedData,
+  type Abi,
   type PublicClient,
   type WalletClient,
   type Transport,
   type Chain,
+  type TypedDataDomain,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
@@ -15,6 +17,8 @@ import {
   verifyExact as verifyExactEvm,
   settleExact as settleExactEvm,
   type FacilitatorSigner,
+  type UptoPayload,
+  type ExactPayload,
 } from "@x402cloud/evm";
 import type { FacilitatorConfig, Facilitator } from "./types.js";
 
@@ -27,28 +31,28 @@ function buildSigner(
     readContract: async (params) => {
       return publicClient.readContract({
         address: params.address,
-        abi: params.abi as any,
+        abi: params.abi as Abi,
         functionName: params.functionName,
-        args: params.args as any,
+        args: params.args as readonly unknown[],
       });
     },
     verifyTypedData: async (params) => {
       // Pure ecrecover — no on-chain calls, works on forks and any environment
       return viemVerifyTypedData({
         address: params.address,
-        domain: params.domain as any,
-        types: params.types as any,
+        domain: params.domain as TypedDataDomain,
+        types: params.types,
         primaryType: params.primaryType,
-        message: params.message as any,
+        message: params.message,
         signature: params.signature,
       });
     },
     writeContract: async (params) => {
       return walletClient.writeContract({
         address: params.address,
-        abi: params.abi as any,
+        abi: params.abi as Abi,
         functionName: params.functionName,
-        args: params.args as any,
+        args: params.args as readonly unknown[],
         chain: walletClient.chain,
         account: walletClient.account!,
       });
@@ -93,12 +97,16 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
 
   const schemes: Record<string, import("./types.js").SchemeHandler> = {
     upto: {
-      verify: (payload, requirements) => verifyUpto(signer, payload as any, requirements),
-      settle: (payload, requirements, ...args) => settleUpto(signer, payload as any, requirements, args[0] as string),
+      verify: (payload, requirements) =>
+        verifyUpto(signer, payload as unknown as UptoPayload, requirements),
+      settle: (payload, requirements, ...args) =>
+        settleUpto(signer, payload as unknown as UptoPayload, requirements, args[0] as string),
     },
     exact: {
-      verify: (payload, requirements) => verifyExactEvm(signer, payload as any, requirements),
-      settle: (payload, requirements) => settleExactEvm(signer, payload as any, requirements),
+      verify: (payload, requirements) =>
+        verifyExactEvm(signer, payload as unknown as ExactPayload, requirements),
+      settle: (payload, requirements) =>
+        settleExactEvm(signer, payload as unknown as ExactPayload, requirements),
     },
   };
 

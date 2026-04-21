@@ -191,7 +191,7 @@ export function buildMiddleware<TRouteConfig extends BaseRouteConfig, TPayload>(
     let perRequestWaitUntil = options?.waitUntil;
     if (!perRequestWaitUntil) {
       try {
-        const execCtx = (c as any).executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+        const execCtx = (c as unknown as { executionCtx?: { waitUntil?: (p: Promise<unknown>) => void } }).executionCtx;
         if (execCtx?.waitUntil) {
           perRequestWaitUntil = execCtx.waitUntil.bind(execCtx);
         }
