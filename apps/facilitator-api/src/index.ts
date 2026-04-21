@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { createFacilitator, createFacilitatorRoutes, type Facilitator } from "@x402cloud/facilitator";
 import type { Network } from "@x402cloud/protocol";
 import { CHAINS } from "@x402cloud/evm";
@@ -195,7 +195,15 @@ app.get("/supported", (c) => {
 });
 
 // ── Auth middleware for protected endpoints ───────────────────────────
-const authMiddleware = async (c: any, next: any) => {
+/**
+ * Bearer-token auth with a constant-time comparison.
+ *
+ * Returns 401 on missing header or mismatch. The explicit byte-length check
+ * short-circuits `timingSafeEqual`, which throws when inputs differ in length
+ * — preserving the constant-time property for same-length inputs (the only
+ * case an attacker can force).
+ */
+const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const auth = c.req.header("Authorization");
   if (!auth) {
     return c.json({ error: "unauthorized" }, 401);
