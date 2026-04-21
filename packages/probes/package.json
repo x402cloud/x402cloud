@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "echo 'probes tested via live runs'",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
