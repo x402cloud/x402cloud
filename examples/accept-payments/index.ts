@@ -6,8 +6,15 @@
  */
 import { Hono } from "hono";
 import { remoteUptoPaymentMiddleware } from "@x402cloud/middleware";
+import type { MeterFunction } from "@x402cloud/protocol";
 
 const app = new Hono();
+
+const meterByResponseSize: MeterFunction = (ctx) => {
+  const contentLength = Number(ctx.response.headers.get("content-length") ?? 0);
+  const kb = Math.ceil(contentLength / 1024);
+  return `$${(kb * 0.001).toFixed(6)}`;
+};
 
 // Define paid routes — each path maps to pricing config
 const paidRoutes = {
@@ -23,12 +30,7 @@ const paidRoutes = {
     maxPrice: "$0.10",
     payTo: "0xYOUR_WALLET_ADDRESS",
     description: "AI generation endpoint",
-    meter: (ctx) => {
-      // Meter based on response size — charge per KB
-      const contentLength = Number(ctx.response.headers.get("content-length") ?? 0);
-      const kb = Math.ceil(contentLength / 1024);
-      return `$${(kb * 0.001).toFixed(6)}`;
-    },
+    meter: meterByResponseSize,
   },
 };
 
