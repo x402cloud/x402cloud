@@ -133,6 +133,30 @@ E2E tests (requires Base Sepolia USDC):
 pnpm -F e2e-tests test
 ```
 
+## Examples
+
+Three runnable workspace examples under [`examples/`](examples):
+
+```bash
+pnpm install
+pnpm -F @x402cloud/example-accept-payments    start  # server accepting payments
+pnpm -F @x402cloud/example-pay-for-inference  start  # client auto-paying 402s
+pnpm -F @x402cloud/example-run-facilitator    start  # self-hosted facilitator
+```
+
+## Deployment
+
+See [DEPLOY.md](DEPLOY.md) for the full per-app recipe set (Cloudflare
+Workers via `wrangler deploy`, the self-hosted Docker facilitator, the ACP
+seller container, and the Goldsky pipeline) plus the consolidated secrets
+table.
+
+## Releases
+
+Versioned together; see [CHANGELOG.md](CHANGELOG.md). Pushing a `v*` tag
+runs [`.github/workflows/release.yml`](.github/workflows/release.yml),
+which publishes every `@x402cloud/*` package to npm with provenance.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
