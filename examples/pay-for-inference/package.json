@@ -1,0 +1,19 @@
+{
+  "name": "@x402cloud/example-pay-for-inference",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Client example: pay for AI inference with @x402cloud/client",
+  "type": "module",
+  "scripts": {
+    "start": "tsx index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@x402cloud/client": "workspace:*",
+    "viem": "^2.23.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@x402cloud/example-accept-payments",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Server example: accept x402 payments with @x402cloud/middleware",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --watch index.ts",
+    "start": "tsx index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@x402cloud/middleware": "workspace:*",
+    "@x402cloud/protocol": "workspace:*",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
