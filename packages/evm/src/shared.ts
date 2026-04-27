@@ -6,7 +6,7 @@ import {
   permit2WitnessTypes,
   erc20Abi,
 } from "./constants.js";
-import { parseChainId } from "./utils.js";
+import { parseChainId, parseUnixSeconds } from "./utils.js";
 
 /**
  * Verify the EIP-712 Permit2 signature.
@@ -69,13 +69,25 @@ export async function verifyPermit2Authorization(
     return { isValid: false, invalidReason: "invalid_recipient" };
   }
 
-  // 3. Deadline not expired (6-second buffer for block time)
-  if (parseInt(deadline) < now + 6) {
+  // 3. Deadline not expired (6-second buffer for block time).
+  //    Use BigInt parsing — `parseInt("999...")` returns Infinity, which
+  //    silently passes any `< now` check and lets a forged deadline replay
+  //    forever. `parseUnixSeconds` rejects non-numerics, negatives, and
+  //    values past `MAX_UNIX_SECONDS` (~year 2400).
+  const deadlineSec = parseUnixSeconds(deadline);
+  if (deadlineSec === null) {
+    return { isValid: false, invalidReason: "invalid_deadline" };
+  }
+  if (deadlineSec < BigInt(now + 6)) {
     return { isValid: false, invalidReason: "deadline_expired" };
   }
 
   // 4. validAfter is in the past
-  if (parseInt(witness.validAfter) > now) {
+  const validAfterSec = parseUnixSeconds(witness.validAfter);
+  if (validAfterSec === null) {
+    return { isValid: false, invalidReason: "invalid_valid_after" };
+  }
+  if (validAfterSec > BigInt(now)) {
     return { isValid: false, invalidReason: "not_yet_valid" };
   }
 

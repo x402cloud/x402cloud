@@ -2,6 +2,7 @@
   "name": "@x402cloud/example-accept-payments",
   "private": true,
   "version": "0.0.0",
+  "license": "MIT",
   "description": "Server example: accept x402 payments with @x402cloud/middleware",
   "type": "module",
   "scripts": {

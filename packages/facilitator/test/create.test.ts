@@ -159,4 +159,68 @@ describe("createFacilitator", () => {
       mockExactRequirements,
     );
   });
+
+  describe("network mismatch guard", () => {
+    it("verify rejects payload with different network", async () => {
+      const facilitator = createFacilitator(testConfig); // configured for eip155:84532
+      const result = await facilitator.verify(mockPayload, {
+        ...mockRequirements,
+        network: "eip155:1" as const, // Ethereum mainnet
+      });
+      expect(result.isValid).toBe(false);
+      if (!result.isValid) expect(result.invalidReason).toBe("network_mismatch");
+    });
+
+    it("settle rejects payload with different network", async () => {
+      const facilitator = createFacilitator(testConfig);
+      const result = await facilitator.settle(
+        mockPayload,
+        { ...mockRequirements, network: "eip155:1" as const },
+        "5000",
+      );
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.errorReason).toBe("network_mismatch");
+    });
+
+    it("verifyExact rejects payload with different network", async () => {
+      const facilitator = createFacilitator(testConfig);
+      const result = await facilitator.verifyExact(mockPayload, {
+        ...mockExactRequirements,
+        network: "eip155:1" as const,
+      });
+      expect(result.isValid).toBe(false);
+    });
+  });
+
+  describe("RPC URL validation", () => {
+    it("rejects RPC URL with non-http(s) protocol", () => {
+      expect(() =>
+        createFacilitator({ ...testConfig, rpcUrl: "ftp://example.com" }),
+      ).toThrow(/http\(s\)/);
+    });
+
+    it("rejects http:// for non-localhost", () => {
+      expect(() =>
+        createFacilitator({ ...testConfig, rpcUrl: "http://attacker.example/" }),
+      ).toThrow(/localhost/);
+    });
+
+    it("allows http://localhost for local dev nodes", () => {
+      expect(() =>
+        createFacilitator({ ...testConfig, rpcUrl: "http://localhost:8545" }),
+      ).not.toThrow();
+    });
+
+    it("rejects RPC URL with embedded credentials", () => {
+      expect(() =>
+        createFacilitator({ ...testConfig, rpcUrl: "https://user:pass@rpc.example/" }),
+      ).toThrow(/credentials/);
+    });
+
+    it("rejects garbage RPC URL", () => {
+      expect(() =>
+        createFacilitator({ ...testConfig, rpcUrl: "not-a-url" }),
+      ).toThrow(/Invalid/);
+    });
+  });
 });

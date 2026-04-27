@@ -9,6 +9,65 @@ they are versioned together until a package needs to diverge.
 
 ## [Unreleased]
 
+### Security
+- **facilitator-api / facilitator-docker:** auth middleware is now bound to
+  payment routes via `createFacilitatorRoutes({ auth })` so it cannot be
+  accidentally omitted at the mount site. The Workers app fails closed (500)
+  if `FACILITATOR_API_TOKEN` is unset; the Docker app refuses to start unless
+  `FACILITATOR_ALLOW_NO_AUTH=true` is explicitly opted in.
+- **@x402cloud/facilitator:** every verify/settle call now rejects with
+  `network_mismatch` if `requirements.network` does not match the
+  facilitator's configured network (defense in depth against cross-chain
+  signature replay).
+- **@x402cloud/evm:** deadline and `validAfter` parsing now uses
+  `parseUnixSeconds` (BigInt + bounded), closing a `parseInt("999...")
+  → Infinity` overflow that allowed signature reuse forever.
+- **@x402cloud/evm:** settle paths re-check the deadline immediately before
+  on-chain submission, so a long-metered request can't burn gas on an
+  expired authorization.
+- **@x402cloud/evm:** settlement errors are run through `sanitizeErrorMessage`
+  before being returned (redacts long hex blobs and URLs that may carry
+  RPC API keys).
+- **@x402cloud/middleware:** `X-Payment-Settled` / `X-Payment-Payer` response
+  headers are validated against strict patterns before being set, blocking
+  CR/LF injection from a misconfigured facilitator.
+- **@x402cloud/middleware:** route prices are validated at construction —
+  empty or zero prices throw immediately instead of silently serving free
+  traffic.
+- **@x402cloud/facilitator:** RPC URL validation rejects non-`http(s)://`
+  schemes, plain HTTP for non-localhost hosts, and embedded credentials.
+- **apps/infer:** added CORS allow-list (env-configurable), HSTS / no-sniff
+  / frame-deny secure headers, and an optional Cloudflare rate-limit
+  binding for the free discovery routes.
+- **apps/facilitator-api:** added secure-headers middleware (HSTS, no-sniff,
+  frame-deny, no-referrer).
+
+### Added
+- `@x402cloud/middleware`: `redactSignature(intent)` helper for safely
+  forwarding `SettlementIntent` to logs / queues.
+- `@x402cloud/middleware`: optional `onSettlementError(err, intent)` callback
+  on `MiddlewareOptions` for surfacing fire-and-forget settlement failures.
+- `@x402cloud/middleware`: `requestTimeoutMs` on `ResilientFetchConfig`
+  (default 10s) — remote facilitator calls now abort instead of hanging.
+- `@x402cloud/evm`: `NETWORK_NAME_TO_CAIP2` map and `resolveNetwork(name)`
+  helper, replacing per-app `NETWORK_MAP` definitions.
+- `@x402cloud/evm`: `parseUnixSeconds`, `MAX_UNIX_SECONDS`,
+  `sanitizeErrorMessage` exports.
+
+### Changed
+- `apps/infer` now imports `NETWORK_NAME_TO_CAIP2` from `@x402cloud/evm`
+  instead of defining its own table.
+- `createFacilitatorRoutes(getFacilitator, options?)` — new optional second
+  argument carrying `{ auth?: MiddlewareHandler }`. Backward compatible.
+
+### Open-source readiness
+- Added `"license": "MIT"` to `apps/facilitator-docker`, `apps/status`, and
+  the three `examples/*` package manifests.
+- Added `packages/probes/README.md` and `homepage` / `bugs` fields.
+- Added `.nvmrc`, `.prettierrc.json`, `MAINTAINERS.md`, `.github/CODEOWNERS`,
+  `.github/FUNDING.yml`, GitHub issue templates, and a PR template.
+- Added CI status badge to README.
+
 ## [0.1.0] - 2026-04-26
 
 Initial public release of the x402cloud monorepo. Implements the

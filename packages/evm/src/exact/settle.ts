@@ -4,8 +4,9 @@ import {
   X402_EXACT_PROXY,
   exactProxyAbi,
 } from "../constants.js";
-import { parseChainId } from "../utils.js";
+import { parseChainId, parseUnixSeconds } from "../utils.js";
 import { verifyPermit2Signature } from "../shared.js";
+import { sanitizeErrorMessage } from "../errors.js";
 
 /**
  * Settle an exact payment on-chain for the full authorized amount.
@@ -18,6 +19,15 @@ export async function settleExact(
 ): Promise<SettleResponse> {
   const { permit2Authorization, signature } = payload;
   const { from, permitted, nonce, deadline, witness } = permit2Authorization;
+
+  // Re-check deadline before submitting on-chain.
+  const deadlineSec = parseUnixSeconds(deadline);
+  if (deadlineSec === null) {
+    return { success: false, errorReason: "invalid_deadline" };
+  }
+  if (deadlineSec < BigInt(Math.floor(Date.now() / 1000))) {
+    return { success: false, errorReason: "deadline_expired" };
+  }
 
   // Signature-only tamper check (no on-chain reads — contract enforces balance/allowance)
   const chainId = parseChainId(requirements.network);
@@ -74,7 +84,7 @@ export async function settleExact(
   } catch (err) {
     return {
       success: false,
-      errorReason: `settlement_failed: ${err instanceof Error ? err.message : String(err)}`,
+      errorReason: `settlement_failed: ${sanitizeErrorMessage(err)}`,
     };
   }
 }

@@ -1,6 +1,9 @@
 import { Hono, type Context } from "hono";
+import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { remoteUptoPaymentMiddleware } from "@x402cloud/middleware";
 import type { UptoRoutesConfig } from "@x402cloud/middleware";
+import { NETWORK_NAME_TO_CAIP2 } from "@x402cloud/evm";
 import { MODELS, type ModelType } from "./models.js";
 import { createMeter } from "./meter.js";
 import {
@@ -12,24 +15,31 @@ import {
   type EmbeddingResult,
 } from "./transform.js";
 
+/**
+ * Optional Cloudflare Workers Rate Limiting binding. When present (configured
+ * in wrangler.toml as a `[[unsafe.bindings]]` of kind "ratelimit"), the free
+ * discovery routes are rate-limited per-IP. Without it, requests pass through
+ * — operators should still gate the deployment behind Cloudflare's edge rate
+ * limiting or a WAF.
+ */
+type RateLimiter = { limit: (input: { key: string }) => Promise<{ success: boolean }> };
+
 type Env = {
   Bindings: {
     AI: Ai;
     NETWORK: string;
     FACILITATOR_URL: string;
+    /** Optional. Comma-separated CORS allow-list, e.g. "https://x402cloud.ai,https://app.x402cloud.ai". Default: "*". */
+    CORS_ALLOWED_ORIGINS?: string;
+    /** Optional rate-limit binding. */
+    RATE_LIMITER?: RateLimiter;
   };
 };
 
 const SERVER_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88";
 
-const NETWORK_MAP: Record<string, `${string}:${string}`> = {
-  "base":         "eip155:8453",
-  "base-sepolia": "eip155:84532",
-  "ethereum":     "eip155:1",
-  "arbitrum":     "eip155:42161",
-  "optimism":     "eip155:10",
-  "polygon":      "eip155:137",
-};
+// Re-exported for tests; the table itself lives in @x402cloud/evm.
+const NETWORK_MAP = NETWORK_NAME_TO_CAIP2;
 
 // --- Route config ---
 
@@ -51,6 +61,48 @@ function buildRoutes(network: `${string}:${string}`): UptoRoutesConfig {
 // --- App ---
 
 const app = new Hono<Env>();
+
+// --- Edge hardening ---
+// CORS allow-list is configurable per-deployment; default "*" preserves the
+// open inference posture but lets operators lock down to known frontends.
+app.use("/*", (c, next) => {
+  const raw = c.env.CORS_ALLOWED_ORIGINS;
+  const origins = raw && raw.length > 0 ? raw.split(",").map((s) => s.trim()) : ["*"];
+  return cors({
+    origin: origins.length === 1 ? origins[0] : origins,
+    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowHeaders: ["Authorization", "Content-Type", "X-PAYMENT", "PAYMENT-SIGNATURE"],
+    exposeHeaders: ["X-Payment-Settled", "X-Payment-Required"],
+    maxAge: 600,
+  })(c, next);
+});
+
+// HSTS, no-sniff, frame-deny, conservative referrer policy.
+app.use("/*", secureHeaders({
+  strictTransportSecurity: "max-age=31536000; includeSubDomains",
+  xContentTypeOptions: "nosniff",
+  xFrameOptions: "DENY",
+  referrerPolicy: "no-referrer",
+}));
+
+// Per-IP rate limit on the free discovery / health routes. Skipped when no
+// binding is configured (Workers binding is optional).
+app.use("/health", rateLimitFree);
+app.use("/models", rateLimitFree);
+app.use("/llms.txt", rateLimitFree);
+app.use("/.well-known/*", rateLimitFree);
+
+async function rateLimitFree(c: Context<Env>, next: () => Promise<void>) {
+  const limiter = c.env.RATE_LIMITER;
+  if (!limiter) return next();
+  const ip =
+    c.req.header("CF-Connecting-IP") ??
+    c.req.header("X-Forwarded-For")?.split(",")[0]?.trim() ??
+    "unknown";
+  const { success } = await limiter.limit({ key: `infer:free:${ip}` });
+  if (!success) return c.json({ error: "rate_limited" }, 429);
+  await next();
+}
 
 // --- Free routes ---
 
@@ -373,6 +425,10 @@ ${urls.map((path) => `  <url><loc>${BASE_URL}${path}</loc></url>`).join("\n")}
 });
 
 // --- Payment middleware (lazy init) ---
+// Cloudflare Workers cannot run async at module level, and env bindings only
+// become available inside a request handler. This is the CLAUDE.md
+// "Worker lazy init" exception: write-once on first request, treated as a
+// value afterwards.
 
 let middlewareInstance: ReturnType<typeof remoteUptoPaymentMiddleware> | null = null;
 

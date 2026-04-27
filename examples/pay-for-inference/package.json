@@ -2,6 +2,7 @@
   "name": "@x402cloud/example-pay-for-inference",
   "private": true,
   "version": "0.0.0",
+  "license": "MIT",
   "description": "Client example: pay for AI inference with @x402cloud/client",
   "type": "module",
   "scripts": {
