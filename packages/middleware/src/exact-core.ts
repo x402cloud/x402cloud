@@ -37,20 +37,29 @@ function exactStrategy(verify: ExactVerifyFn, settle: ExactSettleFn): PaymentStr
         }
 
         // Record settlement intent before firing (if hook provided)
+        const intent = {
+          id: crypto.randomUUID(),
+          payload,
+          requirements,
+          settlementAmount: settledAmount,
+          scheme: "exact",
+          createdAt: Date.now(),
+        };
         if (options?.onSettlementIntent) {
-          await options.onSettlementIntent({
-            id: crypto.randomUUID(),
-            payload,
-            requirements,
-            settlementAmount: settledAmount,
-            scheme: "exact",
-            createdAt: Date.now(),
-          });
+          await options.onSettlementIntent(intent);
         }
 
         // Settle for full price (fire-and-forget — use waitUntil if available for durability)
-        const settlePromise = settle(payload, requirements).catch((err) => {
-          console.error("x402 exact settlement failed:", err);
+        const settlePromise = settle(payload, requirements).catch(async (err) => {
+          if (options?.onSettlementError) {
+            try {
+              await options.onSettlementError(err, intent);
+            } catch (cbErr) {
+              console.error("x402 onSettlementError callback failed:", cbErr);
+            }
+          } else {
+            console.error("x402 exact settlement failed:", err);
+          }
         });
         if (options?.waitUntil) {
           options.waitUntil(settlePromise);

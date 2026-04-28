@@ -2,7 +2,9 @@
 
 Open-source implementation of the [x402 protocol](https://www.x402.org/) standard.
 
+[![CI](https://github.com/x402cloud/x402cloud/actions/workflows/ci.yml/badge.svg)](https://github.com/x402cloud/x402cloud/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](.nvmrc)
 
 ## What is x402cloud?
 

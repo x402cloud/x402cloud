@@ -2,6 +2,7 @@
   "name": "@x402cloud/example-run-facilitator",
   "private": true,
   "version": "0.0.0",
+  "license": "MIT",
   "description": "Self-host example: run an x402 facilitator with @x402cloud/facilitator",
   "type": "module",
   "scripts": {

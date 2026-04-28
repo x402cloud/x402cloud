@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/x402cloud/x402cloud/security/advisories/new
+    about: Report a security issue privately. Do not file a public issue.
+  - name: Question / discussion
+    url: https://github.com/x402cloud/x402cloud/discussions
+    about: Ask a question or discuss usage in GitHub Discussions.

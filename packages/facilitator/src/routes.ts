@@ -1,19 +1,41 @@
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import type { PaymentRequirements } from "@x402cloud/protocol";
 import type { UptoPayload, ExactPayload } from "@x402cloud/evm";
 import type { Facilitator } from "./types.js";
+
+export type CreateFacilitatorRoutesOptions = {
+  /**
+   * Middleware applied to every payment route (`/verify`, `/settle`,
+   * `/verify-exact`, `/settle-exact`) before the handler runs. Pass a
+   * bearer-token check here so auth cannot be accidentally omitted at the
+   * mount site. If omitted, the routes are unauthenticated — only suitable
+   * for local development or when the caller has its own gateway-level auth.
+   */
+  auth?: MiddlewareHandler;
+};
 
 /**
  * Create shared Hono routes for a facilitator.
  *
  * Returns a Hono app with /verify, /settle, /verify-exact, /settle-exact routes.
- * The caller is responsible for mounting auth middleware and info routes — this
- * only creates the payment-related endpoints.
+ * Pass `options.auth` to bind authentication directly to the routes. Info
+ * routes (/, /health, etc.) live at the call site.
  *
  * @param getFacilitator - Lazy getter (supports Workers lazy init and Docker eager init)
+ * @param options        - Optional auth middleware
  */
-export function createFacilitatorRoutes(getFacilitator: () => Facilitator): Hono {
+export function createFacilitatorRoutes(
+  getFacilitator: () => Facilitator,
+  options: CreateFacilitatorRoutesOptions = {},
+): Hono {
   const routes = new Hono();
+
+  if (options.auth) {
+    routes.use("/verify", options.auth);
+    routes.use("/settle", options.auth);
+    routes.use("/verify-exact", options.auth);
+    routes.use("/settle-exact", options.auth);
+  }
 
   // ── Upto: Verify ────────────────────────────────────────────────────
   routes.post("/verify", async (c) => {

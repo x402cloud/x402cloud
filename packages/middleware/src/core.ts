@@ -48,20 +48,29 @@ function uptoStrategy(verify: VerifyFn, settle: SettleFn): PaymentStrategy<UptoR
         });
 
         // Record settlement intent before firing (if hook provided)
+        const intent = {
+          id: crypto.randomUUID(),
+          payload,
+          requirements,
+          settlementAmount: consumedAmount,
+          scheme: "upto",
+          createdAt: Date.now(),
+        };
         if (options?.onSettlementIntent) {
-          await options.onSettlementIntent({
-            id: crypto.randomUUID(),
-            payload,
-            requirements,
-            settlementAmount: consumedAmount,
-            scheme: "upto",
-            createdAt: Date.now(),
-          });
+          await options.onSettlementIntent(intent);
         }
 
         // Settle (fire-and-forget — use waitUntil if available for durability)
-        const settlePromise = settle(payload, requirements, consumedAmount).catch((err) => {
-          console.error("x402 upto settlement failed:", err);
+        const settlePromise = settle(payload, requirements, consumedAmount).catch(async (err) => {
+          if (options?.onSettlementError) {
+            try {
+              await options.onSettlementError(err, intent);
+            } catch (cbErr) {
+              console.error("x402 onSettlementError callback failed:", cbErr);
+            }
+          } else {
+            console.error("x402 upto settlement failed:", err);
+          }
         });
         if (options?.waitUntil) {
           options.waitUntil(settlePromise);
