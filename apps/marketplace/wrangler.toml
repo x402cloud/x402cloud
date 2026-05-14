@@ -1,0 +1,12 @@
+name = "x402cloud-marketplace"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+NETWORK = "eip155:84532"
+FACILITATOR_URL = "https://facilitator.x402cloud.ai"
+OPERATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
+
+[route]
+pattern = "marketplace.x402cloud.ai"
+custom_domain = true

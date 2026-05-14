@@ -1,0 +1,53 @@
+{
+  "name": "@x402cloud/discovery",
+  "version": "0.1.0",
+  "description": "Pure builders for x402 discovery surfaces (openapi, agent-card, llms.txt, agents.json, sitemap.xml, robots.txt, api-catalog)",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./hono": {
+      "types": "./dist/hono.d.ts",
+      "import": "./dist/hono.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "hono": "^4.7.0"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "hono": "^4.7.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "license": "MIT",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x402cloud/x402cloud.git",
+    "directory": "packages/discovery"
+  },
+  "homepage": "https://x402cloud.ai",
+  "bugs": {
+    "url": "https://github.com/x402cloud/x402cloud/issues"
+  },
+  "author": "x402cloud.ai",
+  "keywords": ["x402", "discovery", "openapi", "agent-card", "a2a", "llms.txt", "sitemap"]
+}

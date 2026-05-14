@@ -1,24 +1,27 @@
 import { Hono, type Context } from "hono";
 import { remoteUptoPaymentMiddleware } from "@x402cloud/middleware";
 import type { UptoRoutesConfig } from "@x402cloud/middleware";
+import type { ServiceMeta, ServiceRoute, ServiceSkill } from "@x402cloud/discovery";
+import { mountDiscovery } from "@x402cloud/discovery/hono";
 import { MODELS, type ModelType } from "./models.js";
 import { createMeter } from "./meter.js";
 import {
   toOpenAIChatResponse,
   toOpenAIEmbeddingResponse,
   toOpenAIModelList,
-  toLlmsTxt,
   type ChatResult,
   type EmbeddingResult,
 } from "./transform.js";
 
-type Env = {
-  Bindings: {
-    AI: Ai;
-    NETWORK: string;
-    FACILITATOR_URL: string;
-  };
+const BASE_URL = "https://infer.x402cloud.ai";
+
+type Bindings = {
+  AI: Ai;
+  NETWORK: string;
+  FACILITATOR_URL: string;
 };
+
+type Env = { Bindings: Bindings };
 
 const SERVER_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88";
 
@@ -48,19 +51,163 @@ function buildRoutes(network: `${string}:${string}`): UptoRoutesConfig {
   return routes;
 }
 
-// --- App ---
+// --- Discovery routes (mounted via @x402cloud/discovery) ---
 
-const app = new Hono<Env>();
+const CHAT_REQUEST_SCHEMA = {
+  type: "object",
+  required: ["messages"],
+  properties: {
+    messages: { type: "array", items: { type: "object", required: ["role", "content"], properties: { role: { type: "string", enum: ["system", "user", "assistant"] }, content: { type: "string" } } } },
+    max_tokens: { type: "integer", default: 512 },
+    temperature: { type: "number", default: 0.7 },
+  },
+};
+const CHAT_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    object: { type: "string", enum: ["chat.completion"] },
+    created: { type: "integer" },
+    model: { type: "string" },
+    choices: { type: "array", items: { type: "object", properties: { index: { type: "integer" }, message: { type: "object", properties: { role: { type: "string" }, content: { type: "string" } } }, finish_reason: { type: "string" } } } },
+    usage: { type: "object", properties: { prompt_tokens: { type: "integer" }, completion_tokens: { type: "integer" }, total_tokens: { type: "integer" } } },
+  },
+};
+const EMBED_REQUEST_SCHEMA = {
+  type: "object",
+  required: ["input"],
+  properties: { input: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] } },
+};
+const EMBED_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    object: { type: "string" },
+    data: { type: "array", items: { type: "object", properties: { object: { type: "string" }, index: { type: "integer" }, embedding: { type: "array", items: { type: "number" } } } } },
+    model: { type: "string" },
+  },
+};
+const IMAGE_REQUEST_SCHEMA = {
+  type: "object",
+  required: ["prompt"],
+  properties: { prompt: { type: "string" }, num_steps: { type: "integer", default: 4 } },
+};
+const IMAGE_RESPONSE_SCHEMA = { type: "string", format: "binary" };
 
-// --- Free routes ---
+function exampleFor(name: string, type: ModelType): string[] {
+  if (type === "text") return [`POST ${BASE_URL}/${name} with {"messages":[{"role":"user","content":"Hello"}]}`];
+  if (type === "embed") return [`POST ${BASE_URL}/${name} with {"input":"text to embed"}`];
+  return [`POST ${BASE_URL}/${name} with {"prompt":"a cat in space"}`];
+}
 
-app.get("/", (c) => {
-  const accept = c.req.header("Accept") ?? "";
-  if (accept.includes("text/html")) {
-    const modelRows = Object.entries(MODELS)
-      .map(([k, v]) => `<tr><td><code>POST /${k}</code></td><td>${v.description}</td><td>${v.maxPrice}</td><td><code>${v.model}</code></td></tr>`)
-      .join("\n");
-    return c.html(`<!DOCTYPE html>
+const DISCOVERY_META: ServiceMeta = {
+  name: "infer.x402cloud.ai",
+  description: "AI inference using the x402 protocol standard. OpenAI-compatible. Pay per token with USDC — no signup, no API keys.",
+  baseUrl: BASE_URL,
+  shortDescription: "Edge AI inference with x402 micropayments. OpenAI-compatible.",
+  facilitator: "https://facilitator.x402cloud.ai",
+  defaultOutputModes: ["application/json", "image/png"],
+};
+
+const DISCOVERY_ROUTES: ServiceRoute[] = [
+  { path: "/models", method: "GET", summary: "List available models", tags: ["free"] },
+  { path: "/llms.txt", method: "GET", summary: "LLM-readable documentation", tags: ["free"], responseContentType: "text/plain", responseSchema: { type: "string" } },
+  ...Object.entries(MODELS).map(([name, config]) => {
+    const isText = config.type === "text";
+    const isEmbed = config.type === "embed";
+    return {
+      path: `/${name}`,
+      method: "POST" as const,
+      operationId: name,
+      summary: config.description,
+      tags: [config.type],
+      kind: config.type,
+      payment: { maxPrice: config.maxPrice, network: "Base (USDC)", payTo: SERVER_ADDRESS },
+      requestSchema: isText ? CHAT_REQUEST_SCHEMA : isEmbed ? EMBED_REQUEST_SCHEMA : IMAGE_REQUEST_SCHEMA,
+      responseSchema: isText ? CHAT_RESPONSE_SCHEMA : isEmbed ? EMBED_RESPONSE_SCHEMA : IMAGE_RESPONSE_SCHEMA,
+      responseContentType: config.type === "image" ? "image/png" : "application/json",
+      examples: exampleFor(name, config.type),
+    } satisfies ServiceRoute;
+  }),
+];
+
+const DISCOVERY_SKILLS: ServiceSkill[] = Object.entries(MODELS).map(([name, config]) => ({
+  id: name,
+  name: `${name} inference`,
+  description: config.description,
+  tags: [config.type, "ai", "inference", "x402"],
+  examples: exampleFor(name, config.type),
+}));
+
+// --- Inference handlers ---
+
+async function handleText(c: Context<Env>, name: string) {
+  const body = await c.req.json();
+  const config = MODELS[name];
+  const result = await c.env.AI.run(config.model as Parameters<Ai["run"]>[0], {
+    messages: body.messages,
+    max_tokens: body.max_tokens ?? 512,
+    temperature: body.temperature ?? 0.7,
+  });
+  const id = `chatcmpl-${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
+  const created = Math.floor(Date.now() / 1000);
+  return c.json(toOpenAIChatResponse(result as string | ChatResult, name, id, created));
+}
+
+async function handleEmbed(c: Context<Env>, name: string) {
+  const body = await c.req.json();
+  const config = MODELS[name];
+  const input = body.input ?? body.messages?.[0]?.content ?? "";
+  const texts = Array.isArray(input) ? input : [input];
+  const result = await c.env.AI.run(config.model as Parameters<Ai["run"]>[0], {
+    text: texts,
+  });
+  return c.json(toOpenAIEmbeddingResponse(result as EmbeddingResult, name));
+}
+
+async function handleImage(c: Context<Env>, name: string) {
+  const body = await c.req.json();
+  const config = MODELS[name];
+  const prompt = body.prompt ?? body.messages?.[0]?.content ?? "";
+  const result = await c.env.AI.run(config.model as Parameters<Ai["run"]>[0], {
+    prompt,
+    num_steps: body.num_steps ?? 4,
+  });
+  return new Response(result as ReadableStream, {
+    headers: { "Content-Type": "image/png" },
+  });
+}
+
+const HANDLERS: Record<ModelType, (c: Context<Env>, name: string) => Promise<Response>> = {
+  text: handleText,
+  embed: handleEmbed,
+  image: handleImage,
+};
+
+// --- Deps: immutable per-isolate projection of env ---
+
+type Deps = {
+  readonly middleware: ReturnType<typeof remoteUptoPaymentMiddleware>;
+};
+
+function buildDeps(env: Bindings): Deps {
+  const network = NETWORK_MAP[env.NETWORK];
+  if (!network) throw new Error(`Unknown network: ${env.NETWORK}`);
+  const middleware = remoteUptoPaymentMiddleware(buildRoutes(network), env.FACILITATOR_URL);
+  return Object.freeze({ middleware });
+}
+
+/** Build the Hono app, closing over an immutable `Deps` record. */
+export function createApp(env: Bindings): Hono<Env> {
+  const deps = buildDeps(env);
+  const a = new Hono<Env>();
+
+  a.get("/", (c) => {
+    const accept = c.req.header("Accept") ?? "";
+    if (accept.includes("text/html")) {
+      const modelRows = Object.entries(MODELS)
+        .map(([k, v]) => `<tr><td><code>POST /${k}</code></td><td>${v.description}</td><td>${v.maxPrice}</td><td><code>${v.model}</code></td></tr>`)
+        .join("\n");
+      return c.html(`<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>infer.x402cloud.ai — AI Inference via x402 Protocol</title>
@@ -138,318 +285,87 @@ ${modelRows}
 <a href="https://github.com/x402cloud/x402cloud">github</a>
 </footer>
 </div></body></html>`);
-  }
-
-  return c.json({
-    name: "infer.x402cloud.ai",
-    description: "AI inference using the x402 protocol standard. No signup. No API keys.",
-    docs: "https://infer.x402cloud.ai/llms.txt",
-    models_url: "https://infer.x402cloud.ai/models",
-    payment: "x402 upto (USDC on Base)",
-    recipient: SERVER_ADDRESS,
-    client_sdk: "npm install @x402cloud/client",
-    x402_standard: "https://x402.org",
-    models: Object.fromEntries(
-      Object.entries(MODELS).map(([k, v]) => [
-        k,
-        { maxPrice: v.maxPrice, description: v.description, endpoint: `/${k}` },
-      ])
-    ),
-  });
-});
-
-app.get("/health", (c) => c.json({ status: "ok" }));
-
-app.get("/robots.txt", (c) => c.text(`User-agent: *\nAllow: /\n\nSitemap: https://infer.x402cloud.ai/sitemap.xml\n`));
-
-app.get("/models", (c) => c.json(toOpenAIModelList(MODELS)));
-
-app.get("/llms.txt", (c) => {
-  return c.text(toLlmsTxt(MODELS, SERVER_ADDRESS));
-});
-
-// --- Discovery routes ---
-
-const BASE_URL = "https://infer.x402cloud.ai";
-
-app.get("/openapi.json", (c) => {
-  const paths: Record<string, any> = {};
-
-  // Free endpoints
-  paths["/models"] = {
-    get: {
-      operationId: "listModels",
-      summary: "List available models",
-      tags: ["free"],
-      responses: { "200": { description: "OpenAI-compatible model list", content: { "application/json": { schema: { type: "object" } } } } },
-    },
-  };
-  paths["/health"] = {
-    get: {
-      operationId: "healthCheck",
-      summary: "Health check",
-      tags: ["free"],
-      responses: { "200": { description: "Service health", content: { "application/json": { schema: { type: "object", properties: { status: { type: "string" } } } } } } },
-    },
-  };
-  paths["/llms.txt"] = {
-    get: {
-      operationId: "llmsTxt",
-      summary: "LLM-readable documentation",
-      tags: ["free"],
-      responses: { "200": { description: "Plain text documentation", content: { "text/plain": { schema: { type: "string" } } } } },
-    },
-  };
-
-  // Paid model endpoints
-  const chatRequestSchema = {
-    type: "object",
-    required: ["messages"],
-    properties: {
-      messages: { type: "array", items: { type: "object", required: ["role", "content"], properties: { role: { type: "string", enum: ["system", "user", "assistant"] }, content: { type: "string" } } } },
-      max_tokens: { type: "integer", default: 512 },
-      temperature: { type: "number", default: 0.7 },
-    },
-  };
-  const chatResponseSchema = {
-    type: "object",
-    properties: {
-      id: { type: "string" },
-      object: { type: "string", enum: ["chat.completion"] },
-      created: { type: "integer" },
-      model: { type: "string" },
-      choices: { type: "array", items: { type: "object", properties: { index: { type: "integer" }, message: { type: "object", properties: { role: { type: "string" }, content: { type: "string" } } }, finish_reason: { type: "string" } } } },
-      usage: { type: "object", properties: { prompt_tokens: { type: "integer" }, completion_tokens: { type: "integer" }, total_tokens: { type: "integer" } } },
-    },
-  };
-  const embedRequestSchema = {
-    type: "object",
-    required: ["input"],
-    properties: { input: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] } },
-  };
-  const embedResponseSchema = {
-    type: "object",
-    properties: {
-      object: { type: "string" },
-      data: { type: "array", items: { type: "object", properties: { object: { type: "string" }, index: { type: "integer" }, embedding: { type: "array", items: { type: "number" } } } } },
-      model: { type: "string" },
-    },
-  };
-  const imageRequestSchema = {
-    type: "object",
-    required: ["prompt"],
-    properties: { prompt: { type: "string" }, num_steps: { type: "integer", default: 4 } },
-  };
-
-  for (const [name, config] of Object.entries(MODELS)) {
-    const isText = config.type === "text";
-    const isEmbed = config.type === "embed";
-    const reqSchema = isText ? chatRequestSchema : isEmbed ? embedRequestSchema : imageRequestSchema;
-    const resContent = config.type === "image"
-      ? { "image/png": { schema: { type: "string", format: "binary" } } }
-      : { "application/json": { schema: isText ? chatResponseSchema : embedResponseSchema } };
-
-    paths[`/${name}`] = {
-      post: {
-        operationId: name,
-        summary: config.description,
-        tags: [config.type],
-        "x-x402": { maxPrice: config.maxPrice, network: "Base (USDC)", payTo: SERVER_ADDRESS },
-        requestBody: { required: true, content: { "application/json": { schema: reqSchema } } },
-        responses: {
-          "200": { description: "Inference result", content: resContent },
-          "402": { description: "Payment required — include x402 payment header" },
-        },
-      },
-    };
-  }
-
-  return c.json({
-    openapi: "3.1.0",
-    info: {
-      title: "infer.x402cloud.ai",
-      version: "1.0.0",
-      description: "AI inference using the x402 protocol standard. OpenAI-compatible. Pay per token with USDC — no signup, no API keys.",
-      contact: { url: "https://x402cloud.ai" },
-    },
-    servers: [{ url: BASE_URL, description: "Production" }],
-    paths,
-    "x-x402": {
-      protocol: "x402 upto",
-      network: "Base (EIP-155:8453)",
-      currency: "USDC",
-      recipient: SERVER_ADDRESS,
-      facilitator: "https://facilitator.x402cloud.ai",
-    },
-  });
-});
-
-app.get("/.well-known/agent-card.json", (c) => {
-  const skills = Object.entries(MODELS).map(([name, config]) => ({
-    id: name,
-    name: `${name} inference`,
-    description: config.description,
-    tags: [config.type, "ai", "inference", "x402"],
-    examples: config.type === "text"
-      ? [`POST ${BASE_URL}/${name} with {"messages":[{"role":"user","content":"Hello"}]}`]
-      : config.type === "embed"
-      ? [`POST ${BASE_URL}/${name} with {"input":"text to embed"}`]
-      : [`POST ${BASE_URL}/${name} with {"prompt":"a cat in space"}`],
-  }));
-
-  return c.json({
-    name: "infer.x402cloud.ai",
-    description: "AI inference using the x402 protocol standard. OpenAI-compatible endpoints for text, embeddings, and image generation. Pay per token with USDC — no signup, no API keys.",
-    url: BASE_URL,
-    version: "1.0.0",
-    protocol: "a2a",
-    capabilities: {
-      streaming: false,
-      pushNotifications: false,
-    },
-    authentication: {
-      schemes: ["x402"],
-      description: "Payment via x402 protocol (USDC on Base). No API keys required.",
-    },
-    defaultInputModes: ["application/json"],
-    defaultOutputModes: ["application/json", "image/png"],
-    skills,
-  });
-});
-
-app.get("/.well-known/api-catalog", (c) => {
-  return c.json({
-    linkset: [
-      {
-        anchor: BASE_URL,
-        "service-desc": [
-          { href: `${BASE_URL}/openapi.json`, type: "application/openapi+json" },
-          { href: `${BASE_URL}/llms.txt`, type: "text/plain" },
-        ],
-      },
-    ],
-  });
-});
-
-app.get("/agents.json", (c) => {
-  const endpoints = Object.entries(MODELS).map(([name, config]) => ({
-    name,
-    url: `${BASE_URL}/${name}`,
-    method: "POST",
-    type: config.type,
-    description: config.description,
-    model: config.model,
-    pricing: { maxPrice: config.maxPrice, currency: "USDC", network: "Base", protocol: "x402 upto" },
-  }));
-
-  return c.json({
-    schema_version: "1.0",
-    name: "infer.x402cloud.ai",
-    description: "Edge AI inference with x402 micropayments. OpenAI-compatible.",
-    url: BASE_URL,
-    openapi: `${BASE_URL}/openapi.json`,
-    authentication: { type: "x402", network: "Base (EIP-155:8453)", currency: "USDC", recipient: SERVER_ADDRESS },
-    endpoints,
-  });
-});
-
-app.get("/sitemap.xml", (c) => {
-  const urls = [
-    "/",
-    "/models",
-    "/health",
-    "/llms.txt",
-    "/openapi.json",
-    "/agents.json",
-    "/.well-known/agent-card.json",
-    "/.well-known/api-catalog",
-    ...Object.keys(MODELS).map((name) => `/${name}`),
-  ];
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map((path) => `  <url><loc>${BASE_URL}${path}</loc></url>`).join("\n")}
-</urlset>`;
-  return c.text(xml, 200, { "Content-Type": "application/xml" });
-});
-
-// --- Payment middleware (lazy init) ---
-
-let middlewareInstance: ReturnType<typeof remoteUptoPaymentMiddleware> | null = null;
-
-function getMiddleware(env: Env["Bindings"]) {
-  if (!middlewareInstance) {
-    const network = NETWORK_MAP[env.NETWORK];
-    if (!network) throw new Error(`Unknown network: ${env.NETWORK}`);
-    middlewareInstance = remoteUptoPaymentMiddleware(
-      buildRoutes(network),
-      env.FACILITATOR_URL,
-    );
-  }
-  return middlewareInstance;
-}
-
-app.use("/*", async (c, next) => {
-  const mw = getMiddleware(c.env);
-  return mw(c, next);
-});
-
-// --- Inference handlers ---
-
-async function handleText(c: Context<Env>, name: string) {
-  const body = await c.req.json();
-  const config = MODELS[name];
-  const result = await c.env.AI.run(config.model as Parameters<Ai["run"]>[0], {
-    messages: body.messages,
-    max_tokens: body.max_tokens ?? 512,
-    temperature: body.temperature ?? 0.7,
-  });
-  const id = `chatcmpl-${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
-  const created = Math.floor(Date.now() / 1000);
-  return c.json(toOpenAIChatResponse(result as string | ChatResult, name, id, created));
-}
-
-async function handleEmbed(c: Context<Env>, name: string) {
-  const body = await c.req.json();
-  const config = MODELS[name];
-  const input = body.input ?? body.messages?.[0]?.content ?? "";
-  const texts = Array.isArray(input) ? input : [input];
-  const result = await c.env.AI.run(config.model as Parameters<Ai["run"]>[0], {
-    text: texts,
-  });
-  return c.json(toOpenAIEmbeddingResponse(result as EmbeddingResult, name));
-}
-
-async function handleImage(c: Context<Env>, name: string) {
-  const body = await c.req.json();
-  const config = MODELS[name];
-  const prompt = body.prompt ?? body.messages?.[0]?.content ?? "";
-  const result = await c.env.AI.run(config.model as Parameters<Ai["run"]>[0], {
-    prompt,
-    num_steps: body.num_steps ?? 4,
-  });
-  return new Response(result as ReadableStream, {
-    headers: { "Content-Type": "image/png" },
-  });
-}
-
-const HANDLERS: Record<ModelType, (c: Context<Env>, name: string) => Promise<Response>> = {
-  text: handleText,
-  embed: handleEmbed,
-  image: handleImage,
-};
-
-// --- Paid routes (data-driven) ---
-
-for (const [name, config] of Object.entries(MODELS)) {
-  const handler = HANDLERS[config.type];
-  app.post(`/${name}`, async (c) => {
-    try {
-      return await handler(c, name);
-    } catch (e: any) {
-      return c.json({ error: e.message }, 500);
     }
+
+    return c.json({
+      name: "infer.x402cloud.ai",
+      description: "AI inference using the x402 protocol standard. No signup. No API keys.",
+      docs: "https://infer.x402cloud.ai/llms.txt",
+      models_url: "https://infer.x402cloud.ai/models",
+      payment: "x402 upto (USDC on Base)",
+      recipient: SERVER_ADDRESS,
+      client_sdk: "npm install @x402cloud/client",
+      x402_standard: "https://x402.org",
+      models: Object.fromEntries(
+        Object.entries(MODELS).map(([k, v]) => [
+          k,
+          { maxPrice: v.maxPrice, description: v.description, endpoint: `/${k}` },
+        ])
+      ),
+    });
   });
+
+  a.get("/health", (c) => c.json({ status: "ok" }));
+
+  a.get("/models", (c) => c.json(toOpenAIModelList(MODELS)));
+
+  mountDiscovery(a, DISCOVERY_META, DISCOVERY_ROUTES, { skills: DISCOVERY_SKILLS });
+
+  // Payment middleware (instance built once for this isolate, not per request).
+  a.use("/*", (c, next) => deps.middleware(c, next));
+
+  // Paid routes (data-driven).
+  for (const [name, config] of Object.entries(MODELS)) {
+    const handler = HANDLERS[config.type];
+    a.post(`/${name}`, async (c) => {
+      try {
+        return await handler(c, name);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "infer-error";
+        return c.json({ error: message }, 500);
+      }
+    });
+  }
+
+  return a;
 }
+
+// --- Worker default export ---
+//
+// A single cached Hono instance per isolate, keyed by env.
+
+let cache: { readonly app: Hono<Env>; readonly key: string } | null = null;
+
+function depsKey(env: Bindings): string {
+  return `${env.NETWORK}|${env.FACILITATOR_URL}`;
+}
+
+function getApp(env: Bindings): Hono<Env> {
+  const key = depsKey(env);
+  if (!cache || cache.key !== key) {
+    cache = Object.freeze({ app: createApp(env), key });
+  }
+  return cache.app;
+}
+
+// The Worker entry. `fetch` is what wrangler invokes; `request` mirrors
+// Hono's test helper so existing tests `await app.request(path, init, env)`
+// continue to work without modification. Both route through the same
+// per-isolate cached `createApp(env)` instance.
+const app = {
+  fetch(request: Request, env: Bindings, ctx: ExecutionContext): Response | Promise<Response> {
+    return getApp(env).fetch(request, env, ctx);
+  },
+  request(
+    input: string | Request,
+    init?: RequestInit,
+    env?: Bindings,
+    ctx?: ExecutionContext,
+  ): Promise<Response> {
+    if (!env) throw new Error("env required for app.request() in tests");
+    return Promise.resolve(getApp(env).request(input, init, env, ctx));
+  },
+};
 
 export { buildRoutes, NETWORK_MAP, HANDLERS, SERVER_ADDRESS };
 export default app;

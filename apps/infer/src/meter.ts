@@ -1,10 +1,10 @@
 import type { MeterFunction } from "@x402cloud/protocol";
+import { retailPrice, DEFAULT_MARGIN_BPS } from "@x402cloud/middleware";
 import { MODELS } from "./models.js";
-import type { ModelConfig } from "./models.js";
 import {
-  computeTextCost,
-  computeEmbedCost,
-  computeImageCost,
+  wholesaleTextCost,
+  wholesaleEmbedCost,
+  wholesaleImageCost,
 } from "./pricing.js";
 
 /**
@@ -15,66 +15,94 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/** Format a cost as USDC smallest units (6 decimals) */
-function toMicroUsdc(cost: number): string {
-  return Math.round(cost * 1e6).toString();
-}
-
 /**
  * Create a meter function for a specific model.
- * The meter reads the response body to count output tokens, then computes cost.
  *
- * IMPORTANT: The response body can only be read once. The middleware clones
- * the response before passing it here, so we can safely read it.
+ * The meter computes the **wholesale** USDC cost (in micro-USDC), then applies
+ * the marketplace margin and clamps to the agent's authorized amount via
+ * `retailPrice` from `@x402cloud/middleware`. This is the only place in
+ * `apps/infer` that knows about marketplace margin.
+ *
+ * @param modelName  Key into MODELS
+ * @param marginBps  Marketplace take rate. Defaults to `DEFAULT_MARGIN_BPS`
+ *                   from middleware — pass an explicit value to override per
+ *                   route.
+ *
+ * IMPORTANT: The middleware clones the response before passing it here, so
+ * we can safely read the body.
  */
-export function createMeter(modelName: string): MeterFunction {
+export function createMeter(
+  modelName: string,
+  marginBps = DEFAULT_MARGIN_BPS,
+): MeterFunction {
   const config = MODELS[modelName];
   if (!config) throw new Error(`Unknown model: ${modelName}`);
 
   return async ({ request, response, authorizedAmount }) => {
-    let cost: string;
+    let wholesale: string;
 
     if (config.type === "image") {
-      cost = toMicroUsdc(computeImageCost());
+      wholesale = wholesaleImageCost();
     } else if (config.type === "embed") {
-      // Estimate input tokens from request body
-      const reqBody = await request.clone().json().catch(() => ({})) as Record<string, any>;
-      const input = reqBody.input ?? reqBody.text ?? "";
-      const texts = Array.isArray(input) ? input : [input];
-      const inputTokens = texts.reduce((sum: number, t: string) => sum + estimateTokens(t), 0);
-      cost = toMicroUsdc(computeEmbedCost(config.neurons, inputTokens));
+      const reqBody = (await request
+        .clone()
+        .json()
+        .catch(() => ({}))) as Record<string, unknown>;
+      const input = (reqBody.input as unknown) ?? (reqBody.text as unknown) ?? "";
+      const texts = (Array.isArray(input) ? input : [input]) as unknown[];
+      const inputTokens = texts.reduce<number>(
+        (sum, t) => sum + estimateTokens(typeof t === "string" ? t : ""),
+        0,
+      );
+      wholesale = wholesaleEmbedCost(config.neurons, inputTokens);
     } else {
       // Text model: estimate from request + response
-      const reqBody = await request.clone().json().catch(() => ({})) as Record<string, any>;
-      const resBody = await response.clone().json().catch(() => ({})) as Record<string, any>;
+      const reqBody = (await request
+        .clone()
+        .json()
+        .catch(() => ({}))) as Record<string, unknown>;
+      const resBody = (await response
+        .clone()
+        .json()
+        .catch(() => ({}))) as Record<string, unknown>;
 
-      // Try to use usage from Workers AI response first
-      const usage = resBody?.usage;
+      const usage = resBody.usage as
+        | { prompt_tokens?: number; completion_tokens?: number }
+        | undefined;
       let inputTokens: number;
       let outputTokens: number;
 
-      if (usage?.prompt_tokens && usage?.completion_tokens) {
+      if (
+        usage &&
+        typeof usage.prompt_tokens === "number" &&
+        typeof usage.completion_tokens === "number"
+      ) {
         inputTokens = usage.prompt_tokens;
         outputTokens = usage.completion_tokens;
       } else {
-        // Estimate from content
-        const messages = reqBody.messages ?? [];
-        const inputText = messages.map((m: any) => m.content ?? "").join(" ");
+        const messages = (reqBody.messages as Array<{ content?: unknown }> | undefined) ?? [];
+        const inputText = messages
+          .map((m) => (typeof m?.content === "string" ? m.content : ""))
+          .join(" ");
         inputTokens = estimateTokens(inputText);
 
+        const choices = resBody.choices as
+          | Array<{ message?: { content?: unknown } }>
+          | undefined;
+        const choiceContent = choices?.[0]?.message?.content;
+        const fallbackResponse = resBody.response;
         const outputText =
-          resBody?.choices?.[0]?.message?.content ?? resBody?.response ?? "";
+          typeof choiceContent === "string"
+            ? choiceContent
+            : typeof fallbackResponse === "string"
+            ? fallbackResponse
+            : "";
         outputTokens = estimateTokens(outputText);
       }
 
-      cost = toMicroUsdc(computeTextCost(config.neurons, inputTokens, outputTokens));
+      wholesale = wholesaleTextCost(config.neurons, inputTokens, outputTokens);
     }
 
-    // Never charge more than authorized
-    if (BigInt(cost) > BigInt(authorizedAmount)) {
-      return authorizedAmount;
-    }
-
-    return cost;
+    return retailPrice(wholesale, authorizedAmount, marginBps);
   };
 }
