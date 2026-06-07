@@ -4,7 +4,20 @@ import type { UptoRoutesConfig } from "@x402cloud/middleware";
 import type { ServiceMeta, ServiceRoute, ServiceSkill } from "@x402cloud/discovery";
 import { mountDiscovery } from "@x402cloud/discovery/hono";
 import { MODELS, type ModelType } from "./models.js";
-import { createMeter } from "./meter.js";
+import { createMeter, createOpenAIMeter } from "./meter.js";
+import {
+  OPENAI_ENDPOINTS,
+  resolveModel,
+  endpointMaxPrice,
+  type OpenAIEndpoint,
+} from "./openai.js";
+import {
+  createKvRecorder,
+  createMemoryRecorder,
+  type SettlementRecorder,
+  type KVPut,
+} from "./recorder.js";
+import type { MiddlewareOptions } from "@x402cloud/middleware";
 import {
   toOpenAIChatResponse,
   toOpenAIEmbeddingResponse,
@@ -19,6 +32,12 @@ type Bindings = {
   AI: Ai;
   NETWORK: string;
   FACILITATOR_URL: string;
+  /**
+   * Optional KV namespace for durable settlement recording. When present, the
+   * settlement hooks persist intent/outcome for reconciliation; when absent,
+   * recording is a safe no-op (see buildDeps).
+   */
+  SETTLEMENTS?: KVPut;
 };
 
 type Env = { Bindings: Bindings };
@@ -38,6 +57,8 @@ const NETWORK_MAP: Record<string, `${string}:${string}`> = {
 
 function buildRoutes(network: `${string}:${string}`): UptoRoutesConfig {
   const routes: UptoRoutesConfig = {};
+
+  // Short-name routes: POST /fast, /smart, ... — one paid route per model.
   for (const [name, config] of Object.entries(MODELS)) {
     routes[`POST /${name}`] = {
       network,
@@ -48,6 +69,22 @@ function buildRoutes(network: `${string}:${string}`): UptoRoutesConfig {
       meter: createMeter(name),
     };
   }
+
+  // OpenAI-compatible routes: POST /v1/chat/completions, /v1/embeddings, ...
+  // Same payment middleware, same meter pipeline — NOT a free bypass. maxPrice
+  // is the ceiling across routable models; the meter resolves the actual model
+  // from the body and clamps the charge to its real cost.
+  for (const endpoint of OPENAI_ENDPOINTS) {
+    routes[`POST ${endpoint.path}`] = {
+      network,
+      maxPrice: endpointMaxPrice(endpoint),
+      payTo: SERVER_ADDRESS,
+      maxTimeoutSeconds: 300,
+      description: `OpenAI-compatible ${endpoint.kind} endpoint`,
+      meter: createOpenAIMeter(endpoint),
+    };
+  }
+
   return routes;
 }
 
@@ -108,9 +145,39 @@ const DISCOVERY_META: ServiceMeta = {
   defaultOutputModes: ["application/json", "image/png"],
 };
 
+function openAIDiscoveryRoute(endpoint: OpenAIEndpoint): ServiceRoute {
+  const reqSchema =
+    endpoint.kind === "text"
+      ? CHAT_REQUEST_SCHEMA
+      : endpoint.kind === "embed"
+        ? EMBED_REQUEST_SCHEMA
+        : IMAGE_REQUEST_SCHEMA;
+  const resSchema =
+    endpoint.kind === "text"
+      ? CHAT_RESPONSE_SCHEMA
+      : endpoint.kind === "embed"
+        ? EMBED_RESPONSE_SCHEMA
+        : IMAGE_RESPONSE_SCHEMA;
+  return {
+    path: endpoint.path,
+    method: "POST",
+    operationId: endpoint.path.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, ""),
+    summary: `OpenAI-compatible ${endpoint.kind} endpoint (model selected via request body)`,
+    tags: [endpoint.kind, "openai"],
+    kind: endpoint.kind,
+    payment: { maxPrice: endpointMaxPrice(endpoint), network: "Base (USDC)", payTo: SERVER_ADDRESS },
+    requestSchema: reqSchema,
+    responseSchema: resSchema,
+    responseContentType: endpoint.kind === "image" ? "image/png" : "application/json",
+    examples: [`POST ${BASE_URL}${endpoint.path} with {"model":"${endpoint.defaultModel}", ...}`],
+  };
+}
+
 const DISCOVERY_ROUTES: ServiceRoute[] = [
   { path: "/models", method: "GET", summary: "List available models", tags: ["free"] },
+  { path: "/v1/models", method: "GET", summary: "List available models (OpenAI-compatible)", tags: ["free", "openai"] },
   { path: "/llms.txt", method: "GET", summary: "LLM-readable documentation", tags: ["free"], responseContentType: "text/plain", responseSchema: { type: "string" } },
+  ...OPENAI_ENDPOINTS.map(openAIDiscoveryRoute),
   ...Object.entries(MODELS).map(([name, config]) => {
     const isText = config.type === "text";
     const isEmbed = config.type === "embed";
@@ -189,10 +256,30 @@ type Deps = {
   readonly middleware: ReturnType<typeof remoteUptoPaymentMiddleware>;
 };
 
+/**
+ * Build the MiddlewareOptions that wire the settlement hooks to a recorder.
+ * Only attach the hooks when a KV binding exists — otherwise return `undefined`
+ * so the middleware fires nothing and recording is a true no-op (no in-memory
+ * accumulation in production isolates without KV).
+ */
+function buildSettlementOptions(env: Bindings): MiddlewareOptions | undefined {
+  if (!env.SETTLEMENTS) return undefined;
+  const recorder: SettlementRecorder = createKvRecorder(env.SETTLEMENTS);
+  return {
+    onSettlementIntent: (intent) => recorder.recordIntent(intent),
+    onSettlementResult: (outcome) => recorder.recordResult(outcome),
+  };
+}
+
 function buildDeps(env: Bindings): Deps {
   const network = NETWORK_MAP[env.NETWORK];
   if (!network) throw new Error(`Unknown network: ${env.NETWORK}`);
-  const middleware = remoteUptoPaymentMiddleware(buildRoutes(network), env.FACILITATOR_URL);
+  const middleware = remoteUptoPaymentMiddleware(
+    buildRoutes(network),
+    env.FACILITATOR_URL,
+    undefined,
+    buildSettlementOptions(env),
+  );
   return Object.freeze({ middleware });
 }
 
@@ -279,6 +366,15 @@ ${modelRows}
 
 # Returns 402 → pay with @x402cloud/client to auto-handle payment</div>
 
+<h2>OpenAI-Compatible</h2>
+<div class="code-block"># Point any OpenAI client at the /v1 base — POST /v1/chat/completions works.
+curl -X POST https://infer.x402cloud.ai/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello"}]}'
+
+# /v1/embeddings, /v1/images/generations and GET /v1/models also supported.
+# Returns 402 → same x402 payment flow as the short-name routes.</div>
+
 <footer>
 <a href="https://x402cloud.ai">x402cloud.ai</a>
 <a href="https://x402cloud.ai/llms.txt">docs</a>
@@ -307,23 +403,39 @@ ${modelRows}
 
   a.get("/health", (c) => c.json({ status: "ok" }));
 
+  // Model listing — both the native and OpenAI-compatible paths. Free.
   a.get("/models", (c) => c.json(toOpenAIModelList(MODELS)));
+  a.get("/v1/models", (c) => c.json(toOpenAIModelList(MODELS)));
 
   mountDiscovery(a, DISCOVERY_META, DISCOVERY_ROUTES, { skills: DISCOVERY_SKILLS });
 
   // Payment middleware (instance built once for this isolate, not per request).
   a.use("/*", (c, next) => deps.middleware(c, next));
 
-  // Paid routes (data-driven).
-  for (const [name, config] of Object.entries(MODELS)) {
-    const handler = HANDLERS[config.type];
-    a.post(`/${name}`, async (c) => {
-      try {
-        return await handler(c, name);
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : "infer-error";
-        return c.json({ error: message }, 500);
-      }
+  // Run a handler with uniform 500 error wrapping. Shared by short-name and
+  // OpenAI-compatible routes so inference logic is never duplicated.
+  const runHandler = async (c: Context<Env>, name: string) => {
+    try {
+      return await HANDLERS[MODELS[name].type](c, name);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "infer-error";
+      return c.json({ error: message }, 500);
+    }
+  };
+
+  // Paid short-name routes (data-driven): POST /fast, /smart, ...
+  for (const name of Object.keys(MODELS)) {
+    a.post(`/${name}`, (c) => runHandler(c, name));
+  }
+
+  // Paid OpenAI-compatible routes: resolve the model from the request body,
+  // then reuse the SAME handler. The payment middleware above has already
+  // verified payment (these paths are in buildRoutes), so this is never free.
+  for (const endpoint of OPENAI_ENDPOINTS) {
+    a.post(endpoint.path, async (c) => {
+      const body = await c.req.raw.clone().json().catch(() => ({}));
+      const name = resolveModel(body, endpoint);
+      return runHandler(c, name);
     });
   }
 
@@ -367,5 +479,5 @@ const app = {
   },
 };
 
-export { buildRoutes, NETWORK_MAP, HANDLERS, SERVER_ADDRESS };
+export { buildRoutes, NETWORK_MAP, HANDLERS, SERVER_ADDRESS, buildSettlementOptions };
 export default app;

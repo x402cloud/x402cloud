@@ -17,9 +17,7 @@ export function uptoPaymentMiddleware(
   return buildUptoMiddleware(
     routes,
     (payload, requirements) => verifyUpto(signer, payload, requirements),
-    async (payload, requirements, settlementAmount) => {
-      await settleUpto(signer, payload, requirements, settlementAmount);
-    },
+    (payload, requirements, settlementAmount) => settleUpto(signer, payload, requirements, settlementAmount),
     options,
   );
 }
@@ -36,9 +34,7 @@ export function exactPaymentMiddleware(
   return buildExactMiddleware(
     routes,
     (payload, requirements) => verifyExact(signer, payload, requirements),
-    async (payload, requirements) => {
-      await settleExact(signer, payload, requirements);
-    },
+    (payload, requirements) => settleExact(signer, payload, requirements),
     options,
   );
 }

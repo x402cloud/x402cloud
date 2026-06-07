@@ -10,11 +10,78 @@ export const CHAINS: Record<string, Chain> = {
 /** Uniswap Permit2 — canonical address on all EVM chains */
 export const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3" as const;
 
-/** Coinbase-deployed x402 proxy for exact (fixed) payments */
+/**
+ * Bounded receipt-wait used by settle/confirm (Finding 2).
+ *
+ * viem's `waitForTransactionReceipt` defaults to 180_000ms. Left unbounded, an
+ * in_flight settle can hold the single-use nonce ~180s+, which can exceed the
+ * orchestrator's in_flight lease and let a concurrent attempt reclaim and
+ * double-broadcast. We pass this explicit, smaller bound so the worst-case
+ * settle wall-clock (sign + send + this) stays comfortably under the lease TTL.
+ * The lease (apps/facilitator-api LOCK_TTL_MS) MUST stay strictly larger.
+ */
+export const SETTLEMENT_RECEIPT_TIMEOUT_MS = 60_000;
+
+/**
+ * Coinbase-deployed x402 proxy for exact (fixed) payments.
+ *
+ * Confirmed live on Base Sepolia (eip155:84532). NOT deployed at this address
+ * on Base mainnet (eip155:8453) — `eth_getCode` returns `0x`. See
+ * `proxyAddresses()` for the chain-keyed resolution that mainnet needs.
+ */
 export const X402_EXACT_PROXY = "0x4020615294c913F045dc10f0a5cdEbd86c280001" as const;
 
-/** Coinbase-deployed x402 proxy for upto (metered) payments */
+/**
+ * Coinbase-deployed x402 proxy for upto (metered) payments.
+ *
+ * Confirmed live on Base Sepolia (eip155:84532). NOT deployed at this address
+ * on Base mainnet (eip155:8453) — `eth_getCode` returns `0x`. See
+ * `proxyAddresses()` for the chain-keyed resolution that mainnet needs.
+ */
 export const X402_UPTO_PROXY = "0x4020633461b2895a48930Ff97eE8fCdE8E520002" as const;
+
+/** The two proxy addresses used by a given chain. */
+export type ProxyAddresses = {
+  /** Spender/verifyingContract for the exact (fixed) scheme. */
+  exact: `0x${string}`;
+  /** Spender/verifyingContract for the upto (metered) scheme. */
+  upto: `0x${string}`;
+};
+
+/**
+ * Per-chain proxy address overrides, keyed by CAIP-2 network id.
+ *
+ * Only populate a chain here when its proxies live at addresses that differ
+ * from the legacy `X402_*_PROXY` constants. Chains absent from this map fall
+ * back to those constants via {@link proxyAddresses} — so Base Sepolia and
+ * every existing caller keep their current addresses untouched.
+ *
+ * Mainnet (`eip155:8453`) is intentionally NOT listed yet: the repo's legacy
+ * addresses have no bytecode there, and Coinbase's canonical CREATE2 proxies
+ * (exact `0x402085c248EeA27D92E8b30b2C58ed07f9E20001`,
+ * upto  `0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002`) carry *different* bytecode
+ * than the Sepolia proxies this package's `settle` ABI was written against.
+ * Verify the settle signature on-chain before adding the mainnet entry — see
+ * docs/MAINNET-RUNBOOK.md §3a.
+ */
+export const PROXY_ADDRESSES: Readonly<Record<string, ProxyAddresses>> = Object.freeze({});
+
+/**
+ * Resolve the exact/upto proxy addresses for a CAIP-2 network.
+ *
+ * Falls back to the legacy `X402_*_PROXY` constants for any chain not present
+ * in {@link PROXY_ADDRESSES}, so existing single-chain (Sepolia) callers are
+ * unaffected. New chains accrete by adding a `PROXY_ADDRESSES` entry — no
+ * change to this function or its callers required.
+ */
+export function proxyAddresses(network: string): ProxyAddresses {
+  return (
+    PROXY_ADDRESSES[network] ?? {
+      exact: X402_EXACT_PROXY,
+      upto: X402_UPTO_PROXY,
+    }
+  );
+}
 
 /** Default USDC contract addresses by CAIP-2 network. Consumers merge at construction time. */
 export const DEFAULT_USDC_ADDRESSES: Readonly<Record<string, `0x${string}`>> = Object.freeze({

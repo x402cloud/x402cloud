@@ -5,6 +5,7 @@ import {
   encodeRequirementsHeader,
   type Network,
   type VerifyResponse,
+  type SettleResponse,
   type PaymentRequirements,
   type PaymentRequired,
 } from "@x402cloud/protocol";
@@ -23,13 +24,75 @@ export type SettlementIntent = {
 /** Callback to durably record a settlement intent before the settle call fires */
 export type OnSettlementIntent = (intent: SettlementIntent) => Promise<void>;
 
+/**
+ * The resolved outcome of a settle call, paired with the `intentId` of the
+ * intent it closes. `result.success === false` (or a thrown settle) means the
+ * service was delivered but payment was NOT collected — a reconciliation
+ * obligation. This is the loop-closing counterpart to `onSettlementIntent`.
+ */
+export type SettlementOutcome = {
+  /** Matches the `id` of the SettlementIntent recorded before the settle fired */
+  intentId: string;
+  scheme: string;
+  requirements: PaymentRequirements;
+  settlementAmount: string;
+  result: SettleResponse;
+};
+
+/** Callback to durably record the resolved settlement outcome (success or failure) */
+export type OnSettlementResult = (outcome: SettlementOutcome) => Promise<void>;
+
 /** Options for buildMiddleware beyond routes and strategy */
 export type MiddlewareOptions = {
   /** Called with settlement intent data before the settle call fires, for durable recording */
   onSettlementIntent?: OnSettlementIntent;
+  /**
+   * Called after the settle call resolves, with its outcome. Fires on both
+   * success and failure so callers can close the intent or dead-letter it.
+   * Runs inside the same background (waitUntil-wrapped) promise as settle.
+   */
+  onSettlementResult?: OnSettlementResult;
   /** Wraps the background settlement promise (e.g., Cloudflare Workers ctx.waitUntil) */
   waitUntil?: (promise: Promise<unknown>) => void;
 };
+
+/**
+ * Run a settle call as a durable background task: execute it, log failures,
+ * and report the resolved outcome to `onSettlementResult`. Wrapped in
+ * `waitUntil` when available so it survives the response returning on Workers.
+ *
+ * Never throws — a settlement failure is *data* (a `{success:false}` outcome),
+ * surfaced via the hook and logs, never a swallowed void. This is the single
+ * place settlement is finalized; both upto and exact strategies delegate here.
+ */
+export function runSettlement(
+  settle: () => Promise<SettleResponse>,
+  ctx: { intentId: string; scheme: string; requirements: PaymentRequirements; settlementAmount: string },
+  options?: MiddlewareOptions,
+): void {
+  const task = (async () => {
+    let result: SettleResponse;
+    try {
+      result = await settle();
+    } catch (err) {
+      result = { success: false, errorReason: `settle_threw: ${err instanceof Error ? err.message : String(err)}` };
+    }
+    if (!result.success) {
+      // Service was delivered but payment was not collected — surface loudly.
+      console.error(`x402 ${ctx.scheme} settlement failed:`, result.errorReason);
+    }
+    if (options?.onSettlementResult) {
+      try {
+        await options.onSettlementResult({ ...ctx, result });
+      } catch (err) {
+        console.error(`x402 ${ctx.scheme} onSettlementResult hook failed:`, err);
+      }
+    }
+  })();
+  if (options?.waitUntil) {
+    options.waitUntil(task);
+  }
+}
 
 /** Result of processing the payment flow, framework-agnostic */
 export type PaymentFlowResult =

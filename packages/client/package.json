@@ -18,8 +18,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@x402cloud/protocol": "workspace:*",
-    "@x402cloud/evm": "workspace:*",
+    "@x402cloud/protocol": "workspace:^",
+    "@x402cloud/evm": "workspace:^",
     "viem": "^2.23.0"
   },
   "devDependencies": {
@@ -27,6 +27,7 @@
     "vitest": "^3.0.0"
   },
   "license": "MIT",
+  "sideEffects": false,
   "files": ["dist"],
   "publishConfig": {
     "access": "public"

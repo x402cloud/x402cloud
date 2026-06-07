@@ -16,3 +16,28 @@ custom_domain = true
 
 # FACILITATOR_API_TOKEN should be set as a secret:
 #   npx wrangler secret put FACILITATOR_API_TOKEN
+
+# ── Settlement idempotency (per-nonce records) ───────────────────────────────
+# Create the namespace, then paste the returned id below:
+#   npx wrangler kv namespace create SETTLEMENTS_KV
+#   npx wrangler kv namespace create SETTLEMENTS_KV --preview
+[[kv_namespaces]]
+binding = "SETTLEMENTS_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
+
+# ── Settlement retry queue (transient on-chain/RPC failures) ─────────────────
+# Create the queues first:
+#   npx wrangler queues create settle-retry
+#   npx wrangler queues create settle-retry-dlq
+[[queues.producers]]
+binding = "SETTLE_QUEUE"
+queue = "settle-retry"
+
+[[queues.consumers]]
+queue = "settle-retry"
+# Queue owns backoff + exhaustion; on max_retries the message dead-letters.
+max_retries = 5
+max_batch_size = 10
+max_batch_timeout = 5
+dead_letter_queue = "settle-retry-dlq"

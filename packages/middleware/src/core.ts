@@ -2,12 +2,13 @@ import type { MiddlewareHandler } from "hono";
 import {
   parseUsdcAmount,
   type VerifyResponse,
+  type SettleResponse,
   type PaymentRequirements,
 } from "@x402cloud/protocol";
 import { type UptoPayload, parseUptoPayload } from "@x402cloud/evm";
 import type { UptoRoutesConfig } from "./types.js";
 import { buildPaymentRequired } from "./response.js";
-import { processPayment, buildMiddleware, type PaymentStrategy, type PaymentFlowResult, type MiddlewareOptions } from "./generic-core.js";
+import { processPayment, buildMiddleware, runSettlement, type PaymentStrategy, type PaymentFlowResult, type MiddlewareOptions } from "./generic-core.js";
 
 // Re-export PaymentFlowResult for backward compatibility
 export type { PaymentFlowResult } from "./generic-core.js";
@@ -18,12 +19,17 @@ export type VerifyFn = (
   requirements: PaymentRequirements,
 ) => Promise<VerifyResponse>;
 
-/** Settle function: takes payload + requirements + metered amount, returns void (fire-and-forget) */
+/**
+ * Settle function: takes payload + requirements + metered amount, returns the
+ * on-chain settlement outcome. Returning the `SettleResponse` (rather than
+ * void) lets the middleware record whether payment was actually collected —
+ * a failure here means service was delivered but money was not.
+ */
 export type SettleFn = (
   payload: UptoPayload,
   requirements: PaymentRequirements,
   settlementAmount: string,
-) => Promise<void>;
+) => Promise<SettleResponse>;
 
 /** Build the upto payment strategy from verify/settle functions */
 function uptoStrategy(verify: VerifyFn, settle: SettleFn): PaymentStrategy<UptoRoutesConfig[string], UptoPayload> {
@@ -47,10 +53,13 @@ function uptoStrategy(verify: VerifyFn, settle: SettleFn): PaymentStrategy<UptoR
           payer: verification.payer,
         });
 
+        // One id ties the pre-fire intent to the post-resolve outcome.
+        const intentId = crypto.randomUUID();
+
         // Record settlement intent before firing (if hook provided)
         if (options?.onSettlementIntent) {
           await options.onSettlementIntent({
-            id: crypto.randomUUID(),
+            id: intentId,
             payload,
             requirements,
             settlementAmount: consumedAmount,
@@ -59,13 +68,12 @@ function uptoStrategy(verify: VerifyFn, settle: SettleFn): PaymentStrategy<UptoR
           });
         }
 
-        // Settle (fire-and-forget — use waitUntil if available for durability)
-        const settlePromise = settle(payload, requirements, consumedAmount).catch((err) => {
-          console.error("x402 upto settlement failed:", err);
-        });
-        if (options?.waitUntil) {
-          options.waitUntil(settlePromise);
-        }
+        // Settle as a durable background task — outcome is recorded, not swallowed.
+        runSettlement(
+          () => settle(payload, requirements, consumedAmount),
+          { intentId, scheme: "upto", requirements, settlementAmount: consumedAmount },
+          options,
+        );
 
         return { settledAmount: consumedAmount, payer: verification.payer };
       };

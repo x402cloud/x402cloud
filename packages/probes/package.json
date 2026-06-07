@@ -22,6 +22,7 @@
     "vitest": "^3.0.0"
   },
   "license": "MIT",
+  "sideEffects": false,
   "files": ["dist"],
   "publishConfig": {
     "access": "public"
@@ -32,6 +33,9 @@
     "directory": "packages/probes"
   },
   "homepage": "https://x402cloud.ai",
+  "bugs": {
+    "url": "https://github.com/x402cloud/x402cloud/issues"
+  },
   "author": "x402cloud.ai",
-  "keywords": ["x402", "probes", "health", "monitoring", "diagnostics"]
+  "keywords": ["x402", "probes", "health", "monitoring", "diagnostics", "usdc"]
 }

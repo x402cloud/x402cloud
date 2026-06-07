@@ -1,21 +1,59 @@
 import type { Permit2Authorization, UptoPayload, ExactPayload } from "./types.js";
 
-/**
- * Validate that a value is a hex string (0x-prefixed).
- * Checks prefix only — does not validate hex character content.
- */
-function assertHexString(value: unknown, field: string): asserts value is `0x${string}` {
-  if (typeof value !== "string" || !value.startsWith("0x")) {
-    throw new Error(`${field}: expected hex string (0x...), got ${typeof value === "string" ? JSON.stringify(value) : typeof value}`);
-  }
+/** Variable-length hex string: 0x followed by zero or more hex digits. */
+const HEX_RE = /^0x[0-9a-fA-F]*$/;
+/** Decimal uint256-style string: one or more digits, no sign, no point, no exponent. */
+const DECIMAL_UINT_RE = /^[0-9]+$/;
+
+function describe(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "string") return JSON.stringify(value);
+  return typeof value;
 }
 
 /**
- * Validate that a value is a string (for numeric fields serialized as strings like nonce, deadline, amount).
+ * Validate that a value is a hex string (0x-prefixed, hex digits only).
+ *
+ * Variable length — suitable for signatures and dynamic byte fields. For
+ * fixed-width fields (e.g. addresses) use {@link assertAddress} or pass `bytes`.
+ *
+ * @param bytes Optional fixed byte length. When set, requires exactly
+ *   `bytes * 2` hex digits after the prefix (e.g. 20 for an address).
  */
-function assertString(value: unknown, field: string): asserts value is string {
+function assertHexString(
+  value: unknown,
+  field: string,
+  bytes?: number
+): asserts value is `0x${string}` {
+  if (typeof value !== "string" || !HEX_RE.test(value)) {
+    throw new Error(`${field}: expected hex string (0x...), got ${describe(value)}`);
+  }
+  if (bytes !== undefined) {
+    const digits = value.length - 2;
+    if (digits !== bytes * 2) {
+      throw new Error(`${field}: expected ${bytes}-byte hex (0x + ${bytes * 2} digits), got ${digits} hex digits`);
+    }
+  }
+}
+
+/** Validate that a value is a 20-byte (address-shaped) hex string. */
+function assertAddress(value: unknown, field: string): asserts value is `0x${string}` {
+  assertHexString(value, field, 20);
+}
+
+/**
+ * Validate that a value is a decimal uint256-style string: digits only, no
+ * sign, no decimal point, no exponent, non-empty. These guard fields that are
+ * later passed to BigInt() (nonce, deadline, amount, validAfter) so malformed
+ * input fails loudly at the boundary instead of deep in verification.
+ */
+function assertDecimalUint(value: unknown, field: string): asserts value is string {
   if (typeof value !== "string") {
-    throw new Error(`${field}: expected string, got ${typeof value}`);
+    throw new Error(`${field}: expected decimal integer string, got ${describe(value)}`);
+  }
+  if (!DECIMAL_UINT_RE.test(value)) {
+    throw new Error(`${field}: expected decimal integer string (digits only), got ${JSON.stringify(value)}`);
   }
 }
 
@@ -34,20 +72,20 @@ function assertObject(value: unknown, field: string): asserts value is Record<st
 function parsePermit2Authorization(raw: unknown, path: string): Permit2Authorization {
   assertObject(raw, path);
 
-  assertHexString(raw.from, `${path}.from`);
-  assertHexString(raw.spender, `${path}.spender`);
-  assertString(raw.nonce, `${path}.nonce`);
-  assertString(raw.deadline, `${path}.deadline`);
+  assertAddress(raw.from, `${path}.from`);
+  assertAddress(raw.spender, `${path}.spender`);
+  assertDecimalUint(raw.nonce, `${path}.nonce`);
+  assertDecimalUint(raw.deadline, `${path}.deadline`);
 
   // permitted
   assertObject(raw.permitted, `${path}.permitted`);
-  assertHexString(raw.permitted.token, `${path}.permitted.token`);
-  assertString(raw.permitted.amount, `${path}.permitted.amount`);
+  assertAddress(raw.permitted.token, `${path}.permitted.token`);
+  assertDecimalUint(raw.permitted.amount, `${path}.permitted.amount`);
 
   // witness
   assertObject(raw.witness, `${path}.witness`);
-  assertHexString(raw.witness.to, `${path}.witness.to`);
-  assertString(raw.witness.validAfter, `${path}.witness.validAfter`);
+  assertAddress(raw.witness.to, `${path}.witness.to`);
+  assertDecimalUint(raw.witness.validAfter, `${path}.witness.validAfter`);
   assertHexString(raw.witness.extra, `${path}.witness.extra`);
 
   return raw as unknown as Permit2Authorization;

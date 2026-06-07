@@ -30,14 +30,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@x402cloud/protocol": "workspace:*",
-    "@x402cloud/middleware": "workspace:*"
+    "@x402cloud/protocol": "workspace:^",
+    "@x402cloud/middleware": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   },
   "license": "MIT",
+  "sideEffects": false,
   "files": ["dist"],
   "publishConfig": {
     "access": "public"
@@ -48,6 +49,9 @@
     "directory": "packages/manifests"
   },
   "homepage": "https://x402cloud.ai",
+  "bugs": {
+    "url": "https://github.com/x402cloud/x402cloud/issues"
+  },
   "author": "x402cloud.ai",
-  "keywords": ["x402", "manifest", "catalog", "pricing"]
+  "keywords": ["x402", "manifest", "catalog", "pricing", "usdc", "micropayments"]
 }

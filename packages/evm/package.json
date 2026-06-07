@@ -18,7 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@x402cloud/protocol": "workspace:*",
+    "@x402cloud/protocol": "workspace:^",
     "viem": "^2.23.0"
   },
   "devDependencies": {
@@ -26,6 +26,7 @@
     "vitest": "^3.0.0"
   },
   "license": "MIT",
+  "sideEffects": false,
   "files": ["dist"],
   "publishConfig": {
     "access": "public"

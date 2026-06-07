@@ -10,6 +10,18 @@ binding = "AI"
 NETWORK = "base-sepolia"
 FACILITATOR_URL = "https://facilitator.x402cloud.ai"
 
+# Durable settlement recording (reconciliation). When this binding is present,
+# the payment middleware persists a `pending` record before each on-chain
+# settle and overwrites it with `settled`/`failed` after — failures are also
+# dead-lettered for a reconciliation sweep. Absent binding => safe no-op.
+#
+# Create the namespace once, then paste the returned id below:
+#   CLOUDFLARE_ACCOUNT_ID=331224f43e4f448483cad2f1185ea965 \
+#     npx wrangler kv namespace create SETTLEMENTS
+[[kv_namespaces]]
+binding = "SETTLEMENTS"
+id = "REPLACE_WITH_SETTLEMENTS_KV_NAMESPACE_ID"
+
 [route]
 pattern = "infer.x402cloud.ai"
 custom_domain = true

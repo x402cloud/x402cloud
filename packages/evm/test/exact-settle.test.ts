@@ -42,11 +42,15 @@ function makePayload(): ExactPayload {
   };
 }
 
+const SERIALIZED = "0xf86b..." as `0x${string}`;
+
 function makeSigner(overrides?: {
   receiptStatus?: "success" | "reverted";
   verifyTypedData?: boolean;
-  writeContractThrows?: boolean;
+  signThrows?: boolean;
+  sendThrows?: boolean;
   verifyTypedDataThrows?: boolean;
+  receiptThrows?: boolean;
 }): FacilitatorSigner {
   return {
     readContract: vi.fn(async () => BigInt("1000000")),
@@ -54,19 +58,27 @@ function makeSigner(overrides?: {
       if (overrides?.verifyTypedDataThrows) throw new Error("verify boom");
       return overrides?.verifyTypedData ?? true;
     }),
-    writeContract: vi.fn(async () => {
-      if (overrides?.writeContractThrows) throw new Error("rpc boom");
-      return TX_HASH;
+    // Two-step settlement port (Finding 1): SIGN yields the deterministic hash
+    // with NO network call; SEND broadcasts the raw tx.
+    signSettlementTx: vi.fn(async () => {
+      if (overrides?.signThrows) throw new Error("rpc boom");
+      return { hash: TX_HASH, serialized: SERIALIZED };
     }),
-    waitForTransactionReceipt: vi.fn(async () => ({
-      status: overrides?.receiptStatus ?? ("success" as const),
-      transactionHash: TX_HASH,
-    })),
+    sendRawSettlementTx: vi.fn(async () => {
+      if (overrides?.sendThrows) throw new Error("send dropped (response lost)");
+    }),
+    waitForTransactionReceipt: vi.fn(async () => {
+      if (overrides?.receiptThrows) throw new Error("receipt timeout");
+      return {
+        status: overrides?.receiptStatus ?? ("success" as const),
+        transactionHash: TX_HASH,
+      };
+    }),
   };
 }
 
 describe("settleExact", () => {
-  it("calls writeContract with the exact proxy address and full authorized amount", async () => {
+  it("signs with the exact proxy address, sends the raw tx, and confirms the full authorized amount", async () => {
     const signer = makeSigner();
     const result = await settleExact(signer, makePayload(), makeRequirements());
 
@@ -76,12 +88,13 @@ describe("settleExact", () => {
       expect(result.settledAmount).toBe("100000");
       expect(result.network).toBe("eip155:8453");
     }
-    expect(signer.writeContract).toHaveBeenCalledWith(
+    expect(signer.signSettlementTx).toHaveBeenCalledWith(
       expect.objectContaining({
         address: X402_EXACT_PROXY,
         functionName: "settle",
       }),
     );
+    expect(signer.sendRawSettlementTx).toHaveBeenCalledWith(SERIALIZED);
   });
 
   it("rejects tampered payload (bad signature)", async () => {
@@ -92,7 +105,8 @@ describe("settleExact", () => {
     if (!result.success) {
       expect(result.errorReason).toBe("tampered_payload");
     }
-    expect(signer.writeContract).not.toHaveBeenCalled();
+    expect(signer.signSettlementTx).not.toHaveBeenCalled();
+    expect(signer.sendRawSettlementTx).not.toHaveBeenCalled();
   });
 
   it("returns signature_check_failed when verifyTypedData throws", async () => {
@@ -103,7 +117,8 @@ describe("settleExact", () => {
     if (!result.success) {
       expect(result.errorReason).toBe("signature_check_failed");
     }
-    expect(signer.writeContract).not.toHaveBeenCalled();
+    expect(signer.signSettlementTx).not.toHaveBeenCalled();
+    expect(signer.sendRawSettlementTx).not.toHaveBeenCalled();
   });
 
   it("handles reverted transaction", async () => {
@@ -117,8 +132,9 @@ describe("settleExact", () => {
     }
   });
 
-  it("returns settlement_failed when writeContract throws", async () => {
-    const signer = makeSigner({ writeContractThrows: true });
+  it("returns settlement_failed (TRANSIENT, no tx) when SIGNING throws", async () => {
+    // Signing is pure local crypto → a throw means NO tx exists → safe to retry.
+    const signer = makeSigner({ signThrows: true });
     const result = await settleExact(signer, makePayload(), makeRequirements());
 
     expect(result.success).toBe(false);
@@ -126,5 +142,36 @@ describe("settleExact", () => {
       expect(result.errorReason).toContain("settlement_failed");
       expect(result.errorReason).toContain("rpc boom");
     }
+    // Never sent, never waited — there is no tx to confirm.
+    expect(signer.sendRawSettlementTx).not.toHaveBeenCalled();
+    expect(signer.waitForTransactionReceipt).not.toHaveBeenCalled();
+  });
+
+  it("returns settlement_pending_receipt:<hash> when SEND throws AFTER a successful sign (Finding 1, NEVER re-broadcast)", async () => {
+    // THE new critical case: the raw tx may be live in the mempool while the
+    // send response was lost. We hold the signed hash, so surface pending-receipt
+    // (confirm), NOT settlement_failed (which would re-broadcast and revert).
+    const signer = makeSigner({ sendThrows: true });
+    const result = await settleExact(signer, makePayload(), makeRequirements());
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errorReason).toBe(`settlement_pending_receipt: ${TX_HASH}`);
+    }
+    expect(signer.signSettlementTx).toHaveBeenCalledTimes(1);
+    expect(signer.sendRawSettlementTx).toHaveBeenCalledTimes(1);
+    expect(signer.waitForTransactionReceipt).not.toHaveBeenCalled();
+  });
+
+  it("returns settlement_pending_receipt:<hash> when the tx broadcast but receipt-wait throws (NEVER re-broadcast)", async () => {
+    const signer = makeSigner({ receiptThrows: true });
+    const result = await settleExact(signer, makePayload(), makeRequirements());
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errorReason).toBe(`settlement_pending_receipt: ${TX_HASH}`);
+    }
+    expect(signer.signSettlementTx).toHaveBeenCalledTimes(1);
+    expect(signer.sendRawSettlementTx).toHaveBeenCalledTimes(1);
   });
 });

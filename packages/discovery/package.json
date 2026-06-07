@@ -35,6 +35,7 @@
     "vitest": "^3.0.0"
   },
   "license": "MIT",
+  "sideEffects": false,
   "files": ["dist"],
   "publishConfig": {
     "access": "public"

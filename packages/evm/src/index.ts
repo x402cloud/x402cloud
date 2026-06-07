@@ -2,8 +2,11 @@
 export {
   CHAINS,
   PERMIT2_ADDRESS,
+  SETTLEMENT_RECEIPT_TIMEOUT_MS,
   X402_EXACT_PROXY,
   X402_UPTO_PROXY,
+  PROXY_ADDRESSES,
+  proxyAddresses,
   DEFAULT_USDC_ADDRESSES,
   permit2Domain,
   permit2WitnessTypes,
@@ -11,6 +14,8 @@ export {
   uptoProxyAbi,
   exactProxyAbi,
 } from "./constants.js";
+
+export type { ProxyAddresses } from "./constants.js";
 
 // Types
 export type {
@@ -32,6 +37,9 @@ export { settleUpto } from "./upto/settle.js";
 export { createExactPayload } from "./exact/client.js";
 export { verifyExact } from "./exact/verify.js";
 export { settleExact } from "./exact/settle.js";
+
+// Confirm (scheme-agnostic receipt confirmation of an already-broadcast tx)
+export { confirmSettlement } from "./confirm.js";
 
 // Payload parsing (runtime validation at decode boundary)
 export { parseUptoPayload, parseExactPayload } from "./parse.js";

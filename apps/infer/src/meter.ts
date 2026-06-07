@@ -1,6 +1,7 @@
 import type { MeterFunction } from "@x402cloud/protocol";
 import { retailPrice, DEFAULT_MARGIN_BPS } from "@x402cloud/middleware";
 import { MODELS } from "./models.js";
+import { resolveModel, type OpenAIEndpoint } from "./openai.js";
 import {
   wholesaleTextCost,
   wholesaleEmbedCost,
@@ -104,5 +105,30 @@ export function createMeter(
     }
 
     return retailPrice(wholesale, authorizedAmount, marginBps);
+  };
+}
+
+/**
+ * Create a meter for an OpenAI-compatible endpoint (`/v1/chat/completions`,
+ * etc.). The model is dynamic — it comes from the request body's `model` field
+ * — so this meter resolves the model per request and delegates to that model's
+ * meter via `createMeter`. The agent is therefore billed *exactly* like the
+ * underlying short-name route, with no duplicated pricing logic.
+ *
+ * The endpoint's static maxPrice quote is the ceiling (largest candidate model
+ * of this kind); `retailPrice` inside the delegated meter clamps the actual
+ * charge to that authorization, so a cheaper resolved model never overcharges.
+ */
+export function createOpenAIMeter(
+  endpoint: OpenAIEndpoint,
+  marginBps = DEFAULT_MARGIN_BPS,
+): MeterFunction {
+  return async (ctx) => {
+    const body = (await ctx.request
+      .clone()
+      .json()
+      .catch(() => ({}))) as unknown;
+    const modelName = resolveModel(body, endpoint);
+    return createMeter(modelName, marginBps)(ctx);
   };
 }

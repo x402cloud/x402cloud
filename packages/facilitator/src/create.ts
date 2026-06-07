@@ -1,7 +1,9 @@
 import {
   createPublicClient,
   createWalletClient,
+  encodeFunctionData,
   http,
+  keccak256,
   verifyTypedData as viemVerifyTypedData,
   type Abi,
   type PublicClient,
@@ -16,6 +18,7 @@ import {
   settleUpto,
   verifyExact as verifyExactEvm,
   settleExact as settleExactEvm,
+  confirmSettlement,
   type FacilitatorSigner,
   type UptoPayload,
   type ExactPayload,
@@ -47,19 +50,38 @@ function buildSigner(
         signature: params.signature,
       });
     },
-    writeContract: async (params) => {
-      return walletClient.writeContract({
-        address: params.address,
+    // Two-step settlement port (Finding 1): SIGN (deterministic hash, no
+    // network) is separate from SEND. A send-time throw can leave a live tx in
+    // the mempool, so settle confirms the already-known hash rather than
+    // re-broadcasting (which would revert on the single-use Permit2 nonce).
+    signSettlementTx: async (params) => {
+      const data = encodeFunctionData({
         abi: params.abi as Abi,
         functionName: params.functionName,
         args: params.args as readonly unknown[],
-        chain: walletClient.chain,
-        account: walletClient.account!,
       });
+      // prepareTransactionRequest fills nonce/gas/fees; signTransaction is local
+      // crypto only (no broadcast) and yields the raw tx whose keccak256 IS the
+      // on-chain tx hash.
+      const request = await walletClient.prepareTransactionRequest({
+        account: walletClient.account!,
+        chain: walletClient.chain,
+        to: params.address,
+        data,
+      });
+      const serialized = await walletClient.signTransaction(request as never);
+      return { hash: keccak256(serialized), serialized };
+    },
+    sendRawSettlementTx: async (serialized) => {
+      // Broadcast only — never re-signs, so re-sending a known raw tx is safe.
+      await publicClient.sendRawTransaction({ serializedTransaction: serialized });
     },
     waitForTransactionReceipt: async (params) => {
       const receipt = await publicClient.waitForTransactionReceipt({
         hash: params.hash,
+        // Bounded wait (Finding 2): settle passes a timeout so the worst-case
+        // wall-clock stays below the orchestrator's in_flight lease.
+        ...(params.timeout !== undefined ? { timeout: params.timeout } : {}),
       });
       return {
         status: receipt.status === "success" ? "success" : "reverted",
@@ -130,6 +152,10 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
 
     async settleExact(payload, requirements) {
       return settleExactEvm(signer, payload, requirements);
+    },
+
+    async confirm(txHash, network, settledAmount) {
+      return confirmSettlement(signer, { txHash, network, settledAmount });
     },
   };
 }
