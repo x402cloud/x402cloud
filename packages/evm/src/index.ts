@@ -1,6 +1,8 @@
 // Constants
 export {
   CHAINS,
+  NETWORK_NAME_TO_CAIP2,
+  resolveNetwork,
   PERMIT2_ADDRESS,
   SETTLEMENT_RECEIPT_TIMEOUT_MS,
   X402_EXACT_PROXY,
@@ -45,4 +47,7 @@ export { confirmSettlement } from "./confirm.js";
 export { parseUptoPayload, parseExactPayload } from "./parse.js";
 
 // Utils
-export { parseChainId } from "./utils.js";
+export { parseChainId, parseUnixSeconds, MAX_UNIX_SECONDS } from "./utils.js";
+
+// Errors
+export { sanitizeErrorMessage } from "./errors.js";

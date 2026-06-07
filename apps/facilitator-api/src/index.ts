@@ -1,4 +1,5 @@
 import { Hono, type MiddlewareHandler } from "hono";
+import { secureHeaders } from "hono/secure-headers";
 import { createFacilitator, createFacilitatorRoutes, type Facilitator } from "@x402cloud/facilitator";
 import type { Network, PaymentRequirements, SettleResponse } from "@x402cloud/protocol";
 import type { UptoPayload, ExactPayload } from "@x402cloud/evm";
@@ -37,7 +38,21 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-/** Lazily-created facilitator (avoids module-level async) */
+// Standard HTTP hardening: HSTS, no MIME sniffing, no framing.
+app.use("/*", secureHeaders({
+  strictTransportSecurity: "max-age=31536000; includeSubDomains",
+  xContentTypeOptions: "nosniff",
+  xFrameOptions: "DENY",
+  referrerPolicy: "no-referrer",
+}));
+
+/**
+ * Lazily-created facilitator. Cloudflare Workers cannot run async code at
+ * module top level, and the env bindings only become available inside a
+ * request handler. This is the documented exception to the immutability
+ * rule in CLAUDE.md ("no hidden state, no singletons"): the value is
+ * write-once on first request and treated as a value thereafter.
+ */
 let facilitator: Facilitator | null = null;
 
 function getFacilitator(env: Bindings): Facilitator {
@@ -217,16 +232,23 @@ app.get("/supported", (c) => {
   });
 });
 
-// ── Auth middleware for protected endpoints ───────────────────────────
+// ── Auth + init middleware for protected endpoints ────────────────────
 /**
- * Bearer-token auth with a constant-time comparison.
+ * Fail-closed auth gate for payment routes. Combines:
+ *   1. Configuration check — refuse 500 if FACILITATOR_API_TOKEN is unset,
+ *      so a misconfigured deployment never serves payment endpoints
+ *      unauthenticated.
+ *   2. Bearer-token check with a constant-time comparison.
+ *   3. Lazy facilitator initialization (Workers can't run async at module
+ *      level — see CLAUDE.md "Worker lazy init" exception).
  *
- * Returns 401 on missing header or mismatch. The explicit byte-length check
- * short-circuits `timingSafeEqual`, which throws when inputs differ in length
- * — preserving the constant-time property for same-length inputs (the only
- * case an attacker can force).
+ * Bound directly to the routes via `createFacilitatorRoutes({ auth })` so the
+ * mount site cannot accidentally omit it.
  */
-const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
+const protectPaymentRoute: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
+  if (!c.env.FACILITATOR_API_TOKEN) {
+    return c.json({ error: "facilitator_misconfigured" }, 500);
+  }
   const auth = c.req.header("Authorization");
   if (!auth) {
     return c.json({ error: "unauthorized" }, 401);
@@ -238,19 +260,16 @@ const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next
   if (a.byteLength !== b.byteLength || !(await crypto.subtle.timingSafeEqual(a, b))) {
     return c.json({ error: "unauthorized" }, 401);
   }
+  getFacilitator(c.env);
   await next();
 };
 
-app.use("/verify", authMiddleware);
-app.use("/settle", authMiddleware);
-app.use("/verify-exact", authMiddleware);
-app.use("/settle-exact", authMiddleware);
-
-// ── Ensure facilitator is initialized (Workers lazy init from env) ──
-app.use("/verify", async (c, next) => { getFacilitator(c.env); await next(); });
-app.use("/settle", async (c, next) => { getFacilitator(c.env); await next(); });
-app.use("/verify-exact", async (c, next) => { getFacilitator(c.env); await next(); });
-app.use("/settle-exact", async (c, next) => { getFacilitator(c.env); await next(); });
+// protectPaymentRoute (fail-closed token check + lazy facilitator init) guards
+// the standalone durable settle handlers below, which shadow the shared
+// /settle + /settle-exact routes. /verify + /verify-exact are protected via the
+// { auth } option on createFacilitatorRoutes at the mount site.
+app.use("/settle", protectPaymentRoute);
+app.use("/settle-exact", protectPaymentRoute);
 
 // ── Durable settle (idempotency + retry) ─────────────────────────────
 //
@@ -388,8 +407,14 @@ app.post("/settle-exact", async (c) => {
   return c.json(out, status);
 });
 
-// ── Payment routes (shared: /verify, /verify-exact, and settle fallthroughs) ──
-app.route("/", createFacilitatorRoutes(() => facilitator!));
+// ── Payment routes (shared: /verify, /verify-exact, + settle fallthroughs) ──
+// Auth applied via the { auth } option (PR #3's first-class auth on the routes).
+app.route(
+  "/",
+  createFacilitatorRoutes(() => facilitator!, {
+    auth: protectPaymentRoute as MiddlewareHandler,
+  }),
+);
 
 // ── Queue consumer: retry transient settlement failures ──────────────
 //

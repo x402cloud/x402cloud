@@ -200,4 +200,57 @@ describe("createFacilitatorRoutes", () => {
       expect(getter).not.toHaveBeenCalled();
     });
   });
+
+  describe("auth option (binds middleware to routes)", () => {
+    const auth = async (c: { req: { header: (k: string) => string | undefined }; json: (b: unknown, s?: number) => Response }, next: () => Promise<void>) => {
+      if (c.req.header("Authorization") !== "Bearer test-token") {
+        return c.json({ error: "unauthorized" }, 401);
+      }
+      await next();
+    };
+
+    it("rejects /verify without auth header", async () => {
+      const fac = makeMockFacilitator();
+      const app = createFacilitatorRoutes(() => fac, { auth: auth as never });
+
+      const res = await app.request("/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ payload: mockPayload, requirements: mockRequirements }),
+      });
+      expect(res.status).toBe(401);
+      expect(fac.verify).not.toHaveBeenCalled();
+    });
+
+    it("accepts /verify with valid auth header", async () => {
+      const fac = makeMockFacilitator();
+      const app = createFacilitatorRoutes(() => fac, { auth: auth as never });
+
+      const res = await app.request("/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Authorization": "Bearer test-token" },
+        body: JSON.stringify({ payload: mockPayload, requirements: mockRequirements }),
+      });
+      expect(res.status).toBe(200);
+      expect(fac.verify).toHaveBeenCalled();
+    });
+
+    it("auth applies uniformly to /verify, /settle, /verify-exact, /settle-exact", async () => {
+      const fac = makeMockFacilitator();
+      const app = createFacilitatorRoutes(() => fac, { auth: auth as never });
+
+      for (const path of ["/verify", "/settle", "/verify-exact", "/settle-exact"]) {
+        const res = await app.request(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ payload: mockPayload, requirements: mockRequirements, settlementAmount: "100" }),
+        });
+        expect(res.status).toBe(401);
+      }
+      expect(fac.verify).not.toHaveBeenCalled();
+      expect(fac.settle).not.toHaveBeenCalled();
+      expect(fac.verifyExact).not.toHaveBeenCalled();
+      expect(fac.settleExact).not.toHaveBeenCalled();
+    });
+  });
 });

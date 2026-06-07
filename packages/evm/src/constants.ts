@@ -7,6 +7,33 @@ export const CHAINS: Record<string, Chain> = {
   "eip155:84532": baseSepolia,
 };
 
+/**
+ * Friendly chain name → CAIP-2 network identifier. Centralized so apps don't
+ * each define their own NETWORK_MAP. Add new entries as new networks are
+ * supported. Names are lowercase, hyphenated.
+ */
+export const NETWORK_NAME_TO_CAIP2: Readonly<Record<string, `eip155:${string}`>> = Object.freeze({
+  "ethereum": "eip155:1",
+  "optimism": "eip155:10",
+  "polygon": "eip155:137",
+  "base": "eip155:8453",
+  "base-sepolia": "eip155:84532",
+  "arbitrum": "eip155:42161",
+  "arbitrum-sepolia": "eip155:421614",
+  "avalanche": "eip155:43114",
+});
+
+/** Resolve a name like "base" to its CAIP-2 network. Throws on unknown. */
+export function resolveNetwork(name: string): `eip155:${string}` {
+  const caip2 = NETWORK_NAME_TO_CAIP2[name];
+  if (!caip2) {
+    throw new Error(
+      `Unknown network "${name}". Known: ${Object.keys(NETWORK_NAME_TO_CAIP2).join(", ")}`,
+    );
+  }
+  return caip2;
+}
+
 /** Uniswap Permit2 — canonical address on all EVM chains */
 export const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3" as const;
 

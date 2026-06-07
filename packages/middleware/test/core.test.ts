@@ -18,6 +18,7 @@ vi.mock("@x402cloud/protocol", () => ({
   }),
   parseUsdcAmount: vi.fn((price: string) => {
     const cleaned = price.replace(/[$,\s]/g, "");
+    if (!/^\d+(\.\d+)?$/.test(cleaned)) throw new Error(`Invalid USDC amount: "${price}"`);
     const [intPart, fracPart = ""] = cleaned.split(".");
     const padded = fracPart.padEnd(6, "0").slice(0, 6);
     return (intPart + padded).replace(/^0+/, "") || "0";
@@ -56,7 +57,7 @@ function makePaymentPayload(): { x402Version: number; payload: UptoPayload } {
     payload: {
       signature: "0xdeadbeef" as `0x${string}`,
       permit2Authorization: {
-        from: "0x1111111111111111111111111111111111111111" as `0x${string}`,
+        from: "0x00000000000000000000000000000000000Da1d0" as `0x${string}`,
         permitted: { token: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as `0x${string}`, amount: "10000" },
         spender: "0x000000000022D473030F116dDEE9F6B43aC78BA3" as `0x${string}`,
         nonce: "1",
@@ -80,7 +81,7 @@ describe("buildUptoMiddleware", () => {
   let settleFn: SettleFn;
 
   beforeEach(() => {
-    verifyFn = vi.fn(async () => ({ isValid: true, payer: "0xPayer" }));
+    verifyFn = vi.fn(async () => ({ isValid: true, payer: "0x00000000000000000000000000000000000Da1d0" }));
     settleFn = vi.fn(async () => ({ success: true, transaction: "0xmocktx", network: "eip155:84532", settledAmount: "5000" }));
   });
 
@@ -155,7 +156,7 @@ describe("buildUptoMiddleware", () => {
 
     // Check response headers
     expect(res.headers.get("X-Payment-Settled")).toBe("5000");
-    expect(res.headers.get("X-Payment-Payer")).toBe("0xPayer");
+    expect(res.headers.get("X-Payment-Payer")).toBe("0x00000000000000000000000000000000000Da1d0");
   });
 
   it("returns 402 when verification fails", async () => {
@@ -244,5 +245,43 @@ describe("buildUptoMiddleware", () => {
 
     const body = await res.json();
     expect(body.error).toContain("no asset for network");
+  });
+
+  describe("startup price validation", () => {
+    it("rejects empty maxPrice at construction", () => {
+      const routes: UptoRoutesConfig = {
+        "POST /free": {
+          network: "eip155:84532",
+          maxPrice: "",
+          payTo: TEST_PAY_TO,
+          meter: vi.fn(async () => "0"),
+        },
+      };
+      expect(() => buildUptoMiddleware(routes, verifyFn, settleFn)).toThrow(/price/);
+    });
+
+    it("rejects $0.00 maxPrice at construction", () => {
+      const routes: UptoRoutesConfig = {
+        "POST /free": {
+          network: "eip155:84532",
+          maxPrice: "$0.00",
+          payTo: TEST_PAY_TO,
+          meter: vi.fn(async () => "0"),
+        },
+      };
+      expect(() => buildUptoMiddleware(routes, verifyFn, settleFn)).toThrow(/greater than 0/);
+    });
+
+    it("rejects garbage maxPrice at construction", () => {
+      const routes: UptoRoutesConfig = {
+        "POST /weird": {
+          network: "eip155:84532",
+          maxPrice: "free!" as any,
+          payTo: TEST_PAY_TO,
+          meter: vi.fn(async () => "0"),
+        },
+      };
+      expect(() => buildUptoMiddleware(routes, verifyFn, settleFn)).toThrow();
+    });
   });
 });

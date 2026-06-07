@@ -11,6 +11,12 @@ export type ResilientFetchConfig = {
   circuitBreakerThreshold?: number;
   /** Time in ms before an open circuit moves to half-open. Default: 30000 */
   circuitBreakerResetMs?: number;
+  /**
+   * Per-request timeout in ms. After this elapses without a response, the
+   * request is aborted and treated as a retryable failure. Without this,
+   * a hung facilitator would tie up the caller indefinitely. Default: 10000
+   */
+  requestTimeoutMs?: number;
 };
 
 type CircuitState = "CLOSED" | "OPEN" | "HALF_OPEN";
@@ -29,6 +35,7 @@ const DEFAULTS = {
   retryDelayMs: 200,
   circuitBreakerThreshold: 5,
   circuitBreakerResetMs: 30_000,
+  requestTimeoutMs: 10_000,
 } as const;
 
 function sleep(ms: number): Promise<void> {
@@ -119,6 +126,7 @@ export function createResilientFetch(config?: ResilientFetchConfig): typeof fetc
   const retryDelayMs = config?.retryDelayMs ?? DEFAULTS.retryDelayMs;
   const threshold = config?.circuitBreakerThreshold ?? DEFAULTS.circuitBreakerThreshold;
   const resetMs = config?.circuitBreakerResetMs ?? DEFAULTS.circuitBreakerResetMs;
+  const requestTimeoutMs = config?.requestTimeoutMs ?? DEFAULTS.requestTimeoutMs;
 
   // Mutable reference — transition logic lives in pure nextBreakerState
   let breaker: CircuitBreaker = {
@@ -135,8 +143,19 @@ export function createResilientFetch(config?: ResilientFetchConfig): typeof fetc
         throw new Error("Circuit breaker is OPEN — facilitator unavailable");
       }
 
+      // Per-request timeout: abort if the facilitator hangs longer than
+      // requestTimeoutMs. Compose with any caller-supplied AbortSignal.
+      const timeoutCtrl = new AbortController();
+      const timeoutId = setTimeout(() => timeoutCtrl.abort(), requestTimeoutMs);
+      const callerSignal = init?.signal;
+      if (callerSignal) {
+        if (callerSignal.aborted) timeoutCtrl.abort(callerSignal.reason);
+        else callerSignal.addEventListener("abort", () => timeoutCtrl.abort(callerSignal.reason), { once: true });
+      }
+
       try {
-        const response = await fetch(input, init);
+        const response = await fetch(input, { ...init, signal: timeoutCtrl.signal });
+        clearTimeout(timeoutId);
 
         if (isRetryableStatus(response.status)) {
           breaker = nextBreakerState(breaker, "failure", threshold, resetMs, Date.now());
@@ -152,8 +171,13 @@ export function createResilientFetch(config?: ResilientFetchConfig): typeof fetc
         breaker = nextBreakerState(breaker, "success", threshold, resetMs, Date.now());
         return response;
       } catch (error: unknown) {
+        clearTimeout(timeoutId);
         breaker = nextBreakerState(breaker, "failure", threshold, resetMs, Date.now());
-        if (!isRetryable(error) || attempt >= maxRetries) {
+        // AbortError from our timeout is retryable; AbortError from the caller
+        // is not (caller wants to give up).
+        const isTimeout =
+          error instanceof DOMException && error.name === "AbortError" && !callerSignal?.aborted;
+        if ((!isRetryable(error) && !isTimeout) || attempt >= maxRetries) {
           throw error;
         }
         await sleep(retryDelayMs * 2 ** attempt);

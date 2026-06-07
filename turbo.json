@@ -17,6 +17,26 @@
     },
     "clean": {
       "cache": false
+    },
+    "acp-seller#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "facilitator-api#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "indexer#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "infer#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "status#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
     }
   }
 }

@@ -1,0 +1,9 @@
+# Default owners for everything in the repo.
+*       @x402cloud/maintainers
+
+# Security-sensitive paths require core review.
+/packages/evm/             @x402cloud/maintainers
+/packages/facilitator/     @x402cloud/maintainers
+/packages/middleware/      @x402cloud/maintainers
+/apps/facilitator-api/     @x402cloud/maintainers
+SECURITY.md                @x402cloud/maintainers

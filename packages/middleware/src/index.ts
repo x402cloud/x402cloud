@@ -1,5 +1,5 @@
 // Generic payment processing (strategy pattern)
-export { processPayment, buildMiddleware, runSettlement } from "./generic-core.js";
+export { processPayment, buildMiddleware, runSettlement, redactSignature } from "./generic-core.js";
 export type {
   PaymentStrategy,
   PaymentFlowResult,

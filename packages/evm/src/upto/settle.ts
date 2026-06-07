@@ -4,7 +4,7 @@ import {
   X402_UPTO_PROXY,
   uptoProxyAbi,
 } from "../constants.js";
-import { parseChainId } from "../utils.js";
+import { parseChainId, parseUnixSeconds } from "../utils.js";
 import { verifyPermit2Signature } from "../shared.js";
 import { broadcastAndConfirm } from "../settle-shared.js";
 
@@ -38,6 +38,17 @@ export async function settleUpto(
       settledAmount: "0",
       network: requirements.network,
     };
+  }
+
+  // Re-check deadline immediately before submitting on-chain. Verification
+  // may have happened seconds (or minutes, with metering) earlier; submitting
+  // an expired authorization just burns gas and confuses callers.
+  const deadlineSec = parseUnixSeconds(deadline);
+  if (deadlineSec === null) {
+    return { success: false, errorReason: "invalid_deadline" };
+  }
+  if (deadlineSec < BigInt(Math.floor(Date.now() / 1000))) {
+    return { success: false, errorReason: "deadline_expired" };
   }
 
   // Signature-only tamper check (no on-chain reads — contract enforces balance/allowance)

@@ -11,7 +11,27 @@ import {
 } from "@x402cloud/protocol";
 import { DEFAULT_USDC_ADDRESSES } from "@x402cloud/evm";
 
-/** A durable record of intent to settle, captured BEFORE the settle call fires */
+/**
+ * Reject any string that contains characters not safe for HTTP header values:
+ * CR, LF, NUL, or any non-printable byte. The settlement amount and payer
+ * are also further constrained by regex at the call site, but this helper
+ * is a defense-in-depth check that applies to anything we propagate from
+ * a (potentially remote) facilitator into our response headers.
+ */
+function isSafeHeaderValue(value: unknown): value is string {
+  return typeof value === "string" && /^[\x20-\x7E]{1,256}$/.test(value);
+}
+
+/**
+ * A durable record of intent to settle, captured BEFORE the settle call fires.
+ *
+ * SECURITY NOTE: `payload` contains the client's full Permit2 authorization,
+ * including the EIP-712 signature. Treat it as sensitive when forwarding to
+ * external systems (logs, error trackers, queues): the signature is single-use
+ * but the surrounding metadata identifies the payer's address and amount.
+ * Use `redactSignature()` if you only need a record of the intent, not the
+ * raw signature.
+ */
 export type SettlementIntent = {
   id: string;
   payload: unknown;
@@ -42,6 +62,20 @@ export type SettlementOutcome = {
 /** Callback to durably record the resolved settlement outcome (success or failure) */
 export type OnSettlementResult = (outcome: SettlementOutcome) => Promise<void>;
 
+/**
+ * Replace the `signature` field of an intent's payload with the marker string
+ * `"[redacted]"`. Useful when forwarding intents to logs or error trackers
+ * where storing the raw signature would be inappropriate.
+ */
+export function redactSignature(intent: SettlementIntent): SettlementIntent {
+  const payload = intent.payload as Record<string, unknown> | null | undefined;
+  if (!payload || typeof payload !== "object") return intent;
+  return {
+    ...intent,
+    payload: { ...payload, signature: "[redacted]" },
+  };
+}
+
 /** Options for buildMiddleware beyond routes and strategy */
 export type MiddlewareOptions = {
   /** Called with settlement intent data before the settle call fires, for durable recording */
@@ -54,6 +88,12 @@ export type MiddlewareOptions = {
   onSettlementResult?: OnSettlementResult;
   /** Wraps the background settlement promise (e.g., Cloudflare Workers ctx.waitUntil) */
   waitUntil?: (promise: Promise<unknown>) => void;
+  /**
+   * Called when the fire-and-forget settlement promise rejects. Default is to
+   * log to `console.error`. Provide your own to forward errors to a queue
+   * or error tracker — e.g. for retries based on `SettlementIntent`.
+   */
+  onSettlementError?: (err: unknown, intent: SettlementIntent) => void | Promise<void>;
 };
 
 /**
@@ -67,7 +107,7 @@ export type MiddlewareOptions = {
  */
 export function runSettlement(
   settle: () => Promise<SettleResponse>,
-  ctx: { intentId: string; scheme: string; requirements: PaymentRequirements; settlementAmount: string },
+  intent: SettlementIntent,
   options?: MiddlewareOptions,
 ): void {
   const task = (async () => {
@@ -76,16 +116,31 @@ export function runSettlement(
       result = await settle();
     } catch (err) {
       result = { success: false, errorReason: `settle_threw: ${err instanceof Error ? err.message : String(err)}` };
+      // A thrown settle also fires onSettlementError (for callers forwarding
+      // errors to a queue/error-tracker, keyed on the SettlementIntent).
+      if (options?.onSettlementError) {
+        try {
+          await options.onSettlementError(err, intent);
+        } catch (cbErr) {
+          console.error(`x402 ${intent.scheme} onSettlementError hook failed:`, cbErr);
+        }
+      }
     }
     if (!result.success) {
       // Service was delivered but payment was not collected — surface loudly.
-      console.error(`x402 ${ctx.scheme} settlement failed:`, result.errorReason);
+      console.error(`x402 ${intent.scheme} settlement failed:`, result.errorReason);
     }
     if (options?.onSettlementResult) {
       try {
-        await options.onSettlementResult({ ...ctx, result });
+        await options.onSettlementResult({
+          intentId: intent.id,
+          scheme: intent.scheme,
+          requirements: intent.requirements,
+          settlementAmount: intent.settlementAmount,
+          result,
+        });
       } catch (err) {
-        console.error(`x402 ${ctx.scheme} onSettlementResult hook failed:`, err);
+        console.error(`x402 ${intent.scheme} onSettlementResult hook failed:`, err);
       }
     }
   })();
@@ -247,6 +302,22 @@ export function buildMiddleware<TRouteConfig extends BaseRouteConfig, TPayload>(
   strategy: PaymentStrategy<TRouteConfig, TPayload>,
   options?: MiddlewareOptions,
 ): MiddlewareHandler {
+  // Validate every route's price up-front. `parseUsdcAmount` already throws on
+  // garbage; we additionally reject empty / zero prices because charging
+  // nothing is almost always a config typo, and a misconfigured route silently
+  // serving free traffic is a worse failure mode than a startup error.
+  for (const [routeKey, routeConfig] of Object.entries(routes)) {
+    let parsed: string;
+    try {
+      parsed = strategy.getPrice(routeConfig);
+    } catch (err) {
+      throw new Error(`Route ${routeKey}: invalid price — ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (!parsed || parsed === "0") {
+      throw new Error(`Route ${routeKey}: price must be greater than 0 (got "${parsed}")`);
+    }
+  }
+
   return async (c, next) => {
     // Derive per-request waitUntil from Hono's executionCtx (Cloudflare Workers),
     // unless an explicit waitUntil was provided at construction time.
@@ -289,8 +360,17 @@ export function buildMiddleware<TRouteConfig extends BaseRouteConfig, TPayload>(
         await next();
         const settlement = await result.settle(c.res);
         if (settlement) {
-          c.header("X-Payment-Settled", settlement.settledAmount);
-          c.header("X-Payment-Payer", settlement.payer);
+          // Validate before setting response headers — settlement values
+          // come from the facilitator (potentially remote and untrusted in
+          // a misconfiguration scenario). A CR/LF or stray header byte
+          // would let a malicious facilitator inject arbitrary headers
+          // (Set-Cookie, Cache-Control) into our response.
+          if (isSafeHeaderValue(settlement.settledAmount) && /^\d+$/.test(settlement.settledAmount)) {
+            c.header("X-Payment-Settled", settlement.settledAmount);
+          }
+          if (isSafeHeaderValue(settlement.payer) && /^0x[a-fA-F0-9]{40}$/.test(settlement.payer)) {
+            c.header("X-Payment-Payer", settlement.payer);
+          }
         }
         return;
       }

@@ -1,6 +1,7 @@
 import type { Network, SettleResponse } from "@x402cloud/protocol";
 import type { FacilitatorSigner } from "./types.js";
 import { confirmSettlement } from "./confirm.js";
+import { sanitizeErrorMessage } from "./errors.js";
 
 /**
  * Shared settle broadcast for both schemes: SIGN → SEND → CONFIRM.
@@ -55,7 +56,7 @@ export async function broadcastAndConfirm(
     } catch (err) {
       return {
         success: false,
-        errorReason: `settlement_failed: ${err instanceof Error ? err.message : String(err)}`,
+        errorReason: `settlement_failed: ${sanitizeErrorMessage(err)}`,
       };
     }
 
@@ -91,7 +92,7 @@ export async function broadcastAndConfirm(
   } catch (err) {
     return {
       success: false,
-      errorReason: `settlement_failed: ${err instanceof Error ? err.message : String(err)}`,
+      errorReason: `settlement_failed: ${sanitizeErrorMessage(err)}`,
     };
   }
   return confirmSettlement(signer, { txHash, network, settledAmount });

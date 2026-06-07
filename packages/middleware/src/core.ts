@@ -8,7 +8,7 @@ import {
 import { type UptoPayload, parseUptoPayload } from "@x402cloud/evm";
 import type { UptoRoutesConfig } from "./types.js";
 import { buildPaymentRequired } from "./response.js";
-import { processPayment, buildMiddleware, runSettlement, type PaymentStrategy, type PaymentFlowResult, type MiddlewareOptions } from "./generic-core.js";
+import { processPayment, buildMiddleware, runSettlement, type PaymentStrategy, type PaymentFlowResult, type MiddlewareOptions, type SettlementIntent } from "./generic-core.js";
 
 // Re-export PaymentFlowResult for backward compatibility
 export type { PaymentFlowResult } from "./generic-core.js";
@@ -53,27 +53,26 @@ function uptoStrategy(verify: VerifyFn, settle: SettleFn): PaymentStrategy<UptoR
           payer: verification.payer,
         });
 
-        // One id ties the pre-fire intent to the post-resolve outcome.
-        const intentId = crypto.randomUUID();
+        // One settlement intent: its id ties the pre-fire record to the
+        // post-resolve outcome, and it carries the payload for onSettlementError.
+        const intent: SettlementIntent = {
+          id: crypto.randomUUID(),
+          payload,
+          requirements,
+          settlementAmount: consumedAmount,
+          scheme: "upto",
+          createdAt: Date.now(),
+        };
 
-        // Record settlement intent before firing (if hook provided)
+        // Record settlement intent before firing (if hook provided).
         if (options?.onSettlementIntent) {
-          await options.onSettlementIntent({
-            id: intentId,
-            payload,
-            requirements,
-            settlementAmount: consumedAmount,
-            scheme: "upto",
-            createdAt: Date.now(),
-          });
+          await options.onSettlementIntent(intent);
         }
 
-        // Settle as a durable background task — outcome is recorded, not swallowed.
-        runSettlement(
-          () => settle(payload, requirements, consumedAmount),
-          { intentId, scheme: "upto", requirements, settlementAmount: consumedAmount },
-          options,
-        );
+        // Settle as a durable background task — outcome is recorded via
+        // onSettlementResult (success or failure), a thrown settle is forwarded
+        // to onSettlementError, and waitUntil keeps it alive. Never swallowed.
+        runSettlement(() => settle(payload, requirements, consumedAmount), intent, options);
 
         return { settledAmount: consumedAmount, payer: verification.payer };
       };

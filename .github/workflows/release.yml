@@ -1,0 +1,39 @@
+name: Release
+
+# Publishes all @x402cloud/* packages to npm when a v* tag is pushed.
+# Versions and tag must match — bump package.json files, commit, then:
+#   git tag v0.1.0 && git push --tags
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm -r test --filter='!e2e-tests'
+
+      - name: Publish packages
+        run: pnpm -r --filter "./packages/*" publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

@@ -6,4 +6,5 @@ export {
   pendingReceiptTxHash,
   type SettlementClass,
 } from "./settlement.js";
+export type { CreateFacilitatorRoutesOptions } from "./routes.js";
 export type { FacilitatorConfig, Facilitator, SchemeHandler } from "./types.js";
