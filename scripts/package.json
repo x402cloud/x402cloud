@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "smoke": "tsx sepolia-smoke.ts",
+    "verify:mainnet": "tsx verify-mainnet-proxies.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@x402cloud/agent": "workspace:*",
+    "@x402cloud/evm": "workspace:*",
     "viem": "^2.23.0"
   },
   "devDependencies": {

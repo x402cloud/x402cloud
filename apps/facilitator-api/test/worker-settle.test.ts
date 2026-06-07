@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import type { SettleResponse } from "@x402cloud/protocol";
-import type { RetryJob } from "../src/settlement-store.js";
+import type { ClaimOutcome, RetryJob, SettlementRecord } from "../src/settlement-store.js";
 
 // `crypto.subtle.timingSafeEqual` is a Cloudflare Workers extension that does
 // not exist in Node's WebCrypto. The production auth middleware uses it; under
@@ -56,18 +56,66 @@ vi.mock("@x402cloud/evm", async (importOriginal) => {
 import worker from "../src/index.js";
 
 // ── Fake bindings ────────────────────────────────────────────────────────────
-function fakeKv() {
-  const store = new Map<string, string>();
+
+const LOCK_TTL_MS = 180_000; // mirrors src/settlement-store.ts LOCK_TTL_MS
+
+/**
+ * In-memory fake of the SETTLEMENT_DO namespace. Each (scheme,nonce) name maps to
+ * its own record cell; the RPC methods run the SAME atomic read-modify-write steps
+ * the real SettlementDO runs. Because JS is single-threaded and these methods do
+ * no awaits between read and write, each op is effectively atomic — exactly what a
+ * real DO instance guarantees. (A real miniflare/wrangler DO integration test is a
+ * required follow-up; it cannot run in this unit-test harness.)
+ */
+function fakeSettlementDO() {
+  const cells = new Map<string, SettlementRecord>();
+  const isSuccess = (r: SettlementRecord | undefined) =>
+    r?.status === "settled" && r.result.success === true;
+  const successResult = (r: SettlementRecord) => (r as { result: SettleResponse }).result;
+
+  const stubFor = (name: string) => ({
+    async claim(now: number): Promise<ClaimOutcome> {
+      const r = cells.get(name);
+      if (r) {
+        if (r.status === "settled") return { action: "replay", result: r.result };
+        if (r.status === "awaiting_receipt") return { action: "awaiting", txHash: r.txHash };
+        if (now - r.startedAt < LOCK_TTL_MS) return { action: "in_flight" };
+      }
+      cells.set(name, { status: "in_flight", startedAt: now });
+      return { action: "proceed" };
+    },
+    async recordTerminal(result: SettleResponse, now: number): Promise<SettleResponse> {
+      const r = cells.get(name);
+      if (!result.success && isSuccess(r)) return successResult(r as SettlementRecord);
+      cells.set(name, { status: "settled", result, settledAt: now });
+      return result;
+    },
+    async recordAwaitingReceipt(txHash: string, now: number): Promise<SettleResponse | null> {
+      const r = cells.get(name);
+      if (isSuccess(r)) return successResult(r as SettlementRecord);
+      cells.set(name, { status: "awaiting_receipt", txHash, startedAt: now });
+      return null;
+    },
+    async recordBroadcastRetry(now: number): Promise<SettleResponse | null> {
+      const r = cells.get(name);
+      if (isSuccess(r)) return successResult(r as SettlementRecord);
+      cells.set(name, { status: "in_flight", startedAt: now });
+      return null;
+    },
+    async getRecord(): Promise<SettlementRecord | null> {
+      return cells.get(name) ?? null;
+    },
+  });
+
   return {
-    store,
-    get: vi.fn(async (k: string) => store.get(k) ?? null),
-    put: vi.fn(async (k: string, v: string) => void store.set(k, v)),
-    delete: vi.fn(async (k: string) => void store.delete(k)),
+    cells,
+    idFromName: (name: string) => ({ toString: () => name }),
+    get: (id: { toString(): string }) => stubFor(id.toString()),
   };
 }
 
 function makeEnv() {
-  const kv = fakeKv();
+  const settlementDO = fakeSettlementDO();
   const queued: RetryJob[] = [];
   const env = {
     FACILITATOR_PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
@@ -75,10 +123,10 @@ function makeEnv() {
     RPC_URL: "https://sepolia.base.org",
     NETWORK: "eip155:84532",
     OUR_ADDRESS: "0xOur",
-    SETTLEMENTS_KV: kv,
+    SETTLEMENT_DO: settlementDO,
     SETTLE_QUEUE: { send: vi.fn(async (j: RetryJob) => void queued.push(j)) },
   };
-  return { env, kv, queued };
+  return { env, settlementDO, queued };
 }
 
 const NONCE = "999001";
@@ -273,9 +321,9 @@ describe("worker queue() consumer", () => {
   });
 
   it("acks without re-settling once a prior attempt recorded success (idempotent consumer)", async () => {
-    const { env, kv } = makeEnv();
-    // Seed a settled record under the (scheme, nonce) key.
-    kv.store.set(`settle:upto:nonce:${NONCE}`, JSON.stringify({ status: "settled", result: success, settledAt: 1 }));
+    const { env, settlementDO } = makeEnv();
+    // Seed a settled record under the DO instance for (scheme, nonce).
+    settlementDO.cells.set(`upto:${NONCE}`, { status: "settled", result: success, settledAt: 1 });
 
     const { batch, ack, retry } = batchFor(uptoJob);
     await worker.queue(batch, env);

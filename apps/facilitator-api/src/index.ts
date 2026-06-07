@@ -5,13 +5,18 @@ import type { UptoPayload, ExactPayload } from "@x402cloud/evm";
 import { CHAINS } from "@x402cloud/evm";
 import { landingPageHtml } from "./html.js";
 import {
-  kvSettlementStore,
+  durableObjectCoordinator,
   retrySettle,
   settleWithIdempotency,
-  type KvLike,
   type RetryJob,
   type RetryQueue,
+  type SettlementCoordinator,
+  type SettlementDONamespace,
 } from "./settlement-store.js";
+
+// Re-export the Durable Object class so the Workers runtime can find it by name
+// (wrangler.toml binds SETTLEMENT_DO -> class_name = "SettlementDO").
+export { SettlementDO } from "./settlement-store.js";
 
 type Bindings = {
   FACILITATOR_PRIVATE_KEY: string;
@@ -19,8 +24,13 @@ type Bindings = {
   RPC_URL: string;
   NETWORK: string;
   OUR_ADDRESS: string;
-  /** KV namespace holding per-nonce settlement records (idempotency). */
-  SETTLEMENTS_KV: KvLike;
+  /**
+   * Durable Object namespace holding per-(scheme,nonce) settlement records. Each
+   * instance is single-threaded with transactional storage, giving ATOMIC
+   * read-modify-write — a hard exactly-once-recorded guarantee (no TOCTOU). This
+   * is the default coordinator for the hosted worker.
+   */
+  SETTLEMENT_DO: SettlementDONamespace;
   /** Queue producer for transient-failure settlement retries. */
   SETTLE_QUEUE: { send(body: RetryJob): Promise<void> };
 };
@@ -253,15 +263,18 @@ app.use("/settle-exact", async (c, next) => { getFacilitator(c.env); await next(
 // in @x402cloud/evm; the pure transient/definitive classifier stays in
 // @x402cloud/facilitator (isTransientFailure). This handler only orchestrates.
 
-/** Build the injected store + queue + confirm ports from the worker env. */
+/** Build the injected coordinator + queue + confirm ports from the worker env. */
 function settlementPorts(env: Bindings): {
-  store: ReturnType<typeof kvSettlementStore>;
+  coordinator: SettlementCoordinator;
   queue: RetryQueue;
   confirm: (txHash: string, network: Network, settledAmount: string) => Promise<SettleResponse>;
 } {
   const f = getFacilitator(env);
   return {
-    store: kvSettlementStore(env.SETTLEMENTS_KV),
+    // The hosted worker defaults to the Durable Object coordinator: each
+    // (scheme,nonce) op is an atomic read-modify-write on a single-threaded DO,
+    // closing the recorded-outcome races KV could only narrow.
+    coordinator: durableObjectCoordinator(env.SETTLEMENT_DO),
     queue: { send: (job) => env.SETTLE_QUEUE.send(job) },
     confirm: (txHash, network, settledAmount) =>
       f.confirm(txHash as `0x${string}`, network, settledAmount),
@@ -315,7 +328,7 @@ app.post("/settle", async (c) => {
   }
 
   const f = getFacilitator(c.env);
-  const { store, queue } = settlementPorts(c.env);
+  const { coordinator, queue } = settlementPorts(c.env);
   const job: RetryJob = {
     scheme: "upto",
     nonce,
@@ -327,7 +340,7 @@ app.post("/settle", async (c) => {
   };
 
   const outcome = await settleWithIdempotency({
-    store,
+    coordinator,
     queue,
     settle: () => f.settle(body.payload, body.requirements, body.settlementAmount),
     job,
@@ -354,7 +367,7 @@ app.post("/settle-exact", async (c) => {
   }
 
   const f = getFacilitator(c.env);
-  const { store, queue } = settlementPorts(c.env);
+  const { coordinator, queue } = settlementPorts(c.env);
   const job: RetryJob = {
     scheme: "exact",
     nonce,
@@ -365,7 +378,7 @@ app.post("/settle-exact", async (c) => {
   };
 
   const outcome = await settleWithIdempotency({
-    store,
+    coordinator,
     queue,
     settle: () => f.settleExact(body.payload, body.requirements),
     job,
@@ -394,7 +407,7 @@ async function handleQueue(
   env: Bindings,
 ): Promise<void> {
   const f = getFacilitator(env);
-  const { store, queue, confirm } = settlementPorts(env);
+  const { coordinator, queue, confirm } = settlementPorts(env);
 
   for (const msg of batch.messages) {
     const job = msg.body;
@@ -436,7 +449,7 @@ async function handleQueue(
     const confirmFn = (txHash: string) => confirm(txHash, network, settledAmount);
 
     try {
-      await retrySettle({ store, queue, settle, confirm: confirmFn, job });
+      await retrySettle({ coordinator, queue, settle, confirm: confirmFn, job });
       msg.ack();
     } catch {
       // Still transient / still pending — let the Queue retry / dead-letter.

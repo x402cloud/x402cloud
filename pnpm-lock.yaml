@@ -55,6 +55,9 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@22.19.11)(tsx@4.21.0)
       wrangler:
         specifier: ^3.100.0
         version: 3.114.17(@cloudflare/workers-types@4.20260302.0)
@@ -273,13 +276,13 @@ importers:
   packages/agent:
     dependencies:
       '@x402cloud/client':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../client
       '@x402cloud/evm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../evm
       '@x402cloud/protocol':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../protocol
     devDependencies:
       typescript:
@@ -295,10 +298,10 @@ importers:
   packages/client:
     dependencies:
       '@x402cloud/evm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../evm
       '@x402cloud/protocol':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../protocol
       viem:
         specifier: ^2.23.0
@@ -326,7 +329,7 @@ importers:
   packages/evm:
     dependencies:
       '@x402cloud/protocol':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../protocol
       viem:
         specifier: ^2.23.0
@@ -342,10 +345,10 @@ importers:
   packages/facilitator:
     dependencies:
       '@x402cloud/evm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../evm
       '@x402cloud/protocol':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../protocol
       hono:
         specifier: ^4.7.0
@@ -364,10 +367,10 @@ importers:
   packages/manifests:
     dependencies:
       '@x402cloud/middleware':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../middleware
       '@x402cloud/protocol':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../protocol
     devDependencies:
       typescript:
@@ -380,10 +383,10 @@ importers:
   packages/middleware:
     dependencies:
       '@x402cloud/evm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../evm
       '@x402cloud/protocol':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../protocol
     devDependencies:
       hono:
@@ -419,6 +422,9 @@ importers:
       '@x402cloud/agent':
         specifier: workspace:*
         version: link:../packages/agent
+      '@x402cloud/evm':
+        specifier: workspace:*
+        version: link:../packages/evm
       viem:
         specifier: ^2.23.0
         version: 2.46.2(typescript@5.9.3)(zod@3.22.3)

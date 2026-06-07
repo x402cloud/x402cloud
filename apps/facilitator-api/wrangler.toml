@@ -17,14 +17,24 @@ custom_domain = true
 # FACILITATOR_API_TOKEN should be set as a secret:
 #   npx wrangler secret put FACILITATOR_API_TOKEN
 
-# ── Settlement idempotency (per-nonce records) ───────────────────────────────
-# Create the namespace, then paste the returned id below:
-#   npx wrangler kv namespace create SETTLEMENTS_KV
-#   npx wrangler kv namespace create SETTLEMENTS_KV --preview
-[[kv_namespaces]]
-binding = "SETTLEMENTS_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
+# ── Settlement idempotency (per-(scheme,nonce) records) ──────────────────────
+# A Durable Object holds each (scheme,nonce) settlement record. One DO instance
+# per nonce (addressed by idFromName("scheme:nonce")) is single-threaded with
+# transactional, strongly-consistent storage, so every state transition (claim /
+# recordTerminal / recordAwaitingReceipt / recordBroadcastRetry) is an ATOMIC
+# read-modify-write. This gives a hard exactly-once-recorded guarantee — the
+# lease and the sticky-success latch become real invariants, not narrowed races.
+# (The earlier KV binding could not provide compare-and-set; self-hosters without
+# Durable Objects can still use kvCoordinator from settlement-store.ts.)
+[[durable_objects.bindings]]
+name = "SETTLEMENT_DO"
+class_name = "SettlementDO"
+
+# SettlementDO uses the SQLite-backed storage backend (required for new DO
+# classes on the Workers free + standard plans, and the recommended default).
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SettlementDO"]
 
 # ── Settlement retry queue (transient on-chain/RPC failures) ─────────────────
 # Create the queues first:
