@@ -58,8 +58,8 @@ function makePaymentPayload(): { x402Version: number; payload: UptoPayload } {
       signature: "0xdeadbeef" as `0x${string}`,
       permit2Authorization: {
         from: "0x00000000000000000000000000000000000Da1d0" as `0x${string}`,
-        permitted: { token: "0xUSDC" as `0x${string}`, amount: "10000" },
-        spender: "0xSpender" as `0x${string}`,
+        permitted: { token: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as `0x${string}`, amount: "10000" },
+        spender: "0x000000000022D473030F116dDEE9F6B43aC78BA3" as `0x${string}`,
         nonce: "1",
         deadline: "9999999999",
         witness: {
@@ -82,7 +82,7 @@ describe("buildUptoMiddleware", () => {
 
   beforeEach(() => {
     verifyFn = vi.fn(async () => ({ isValid: true, payer: "0x00000000000000000000000000000000000Da1d0" }));
-    settleFn = vi.fn(async () => {});
+    settleFn = vi.fn(async () => ({ success: true, transaction: "0xmocktx", network: "eip155:84532", settledAmount: "5000" }));
   });
 
   it("passes through requests not matching any route", async () => {

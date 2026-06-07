@@ -15,3 +15,6 @@ dist/
 # IDE
 .vscode/
 .idea/
+
+# Claude Code local state (settings, worktrees, transcripts)
+.claude/

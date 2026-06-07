@@ -40,6 +40,16 @@ export type Facilitator = {
   /** Settle an exact payment on-chain (full authorized amount) */
   settleExact(payload: ExactPayload, requirements: PaymentRequirements): Promise<SettleResponse>;
 
+  /**
+   * Confirm the on-chain outcome of an ALREADY-BROADCAST settlement tx.
+   *
+   * Looks up the receipt for `txHash` and returns success / transaction_reverted
+   * / settlement_pending_receipt. NEVER re-broadcasts — used by the durable
+   * retry path for transactions stuck in `awaiting_receipt`. Receipt status is
+   * scheme-agnostic, so one confirm serves both upto and exact.
+   */
+  confirm(txHash: `0x${string}`, network: Network, settledAmount: string): Promise<SettleResponse>;
+
   /** Facilitator's address (pays gas) */
   address: `0x${string}`;
   /** Supported network */

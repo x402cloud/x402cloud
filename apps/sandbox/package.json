@@ -1,0 +1,36 @@
+{
+  "name": "sandbox",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Isolated code execution sandbox at sandbox.x402cloud.ai with per-second x402 billing",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@x402cloud/protocol": "workspace:*",
+    "@x402cloud/evm": "workspace:*",
+    "@x402cloud/middleware": "workspace:*",
+    "@x402cloud/discovery": "workspace:*",
+    "@x402cloud/manifests": "workspace:*",
+    "@cloudflare/sandbox": "^0.7.0",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4",
+    "wrangler": "^3.100.0",
+    "@cloudflare/workers-types": "^4.20250214.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x402cloud/x402cloud.git",
+    "directory": "apps/sandbox"
+  },
+  "author": "x402cloud.ai"
+}

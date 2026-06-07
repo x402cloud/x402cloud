@@ -150,6 +150,297 @@ describe("parseUptoPayload", () => {
   });
 });
 
+describe("parseUptoPayload — hardened input validation", () => {
+  // --- signatures (variable length, hex content enforced) ---
+
+  it("accepts a lowercase hex signature", () => {
+    expect(() =>
+      parseUptoPayload({ ...validPayload, signature: "0xabcdef0123456789" })
+    ).not.toThrow();
+  });
+
+  it("accepts an uppercase hex signature", () => {
+    expect(() =>
+      parseUptoPayload({ ...validPayload, signature: "0xABCDEF0123456789" })
+    ).not.toThrow();
+  });
+
+  it("accepts a mixed-case hex signature", () => {
+    expect(() =>
+      parseUptoPayload({ ...validPayload, signature: "0xAbCdEf0123456789" })
+    ).not.toThrow();
+  });
+
+  it("accepts a full-length 65-byte ECDSA signature", () => {
+    const sig = `0x${"a1".repeat(65)}`;
+    expect(() =>
+      parseUptoPayload({ ...validPayload, signature: sig })
+    ).not.toThrow();
+  });
+
+  it("throws when signature has non-hex characters (0xZZZZ)", () => {
+    expect(() =>
+      parseUptoPayload({ ...validPayload, signature: "0xZZZZ" })
+    ).toThrow("UptoPayload.signature");
+  });
+
+  it("throws when signature has a trailing non-hex char", () => {
+    expect(() =>
+      parseUptoPayload({ ...validPayload, signature: "0xdeadbeeg" })
+    ).toThrow("UptoPayload.signature");
+  });
+
+  it("throws when signature has internal whitespace", () => {
+    expect(() =>
+      parseUptoPayload({ ...validPayload, signature: "0xdead beef" })
+    ).toThrow("UptoPayload.signature");
+  });
+
+  // --- addresses (fixed 20-byte length, hex content enforced) ---
+
+  it("accepts checksummed (mixed-case) addresses", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          from: "0xAbCdEf0123456789abcdef0123456789ABCDEF01",
+        },
+      })
+    ).not.toThrow();
+  });
+
+  it("throws when an address has non-hex characters", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          from: "0xZZZZ111111111111111111111111111111111111",
+        },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.from");
+  });
+
+  it("throws when an address is too short", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: { ...validPermit2Authorization, from: "0x1234" },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.from");
+  });
+
+  it("throws when an address is too long", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          spender: "0x22222222222222222222222222222222222222220000",
+        },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.spender");
+  });
+
+  // --- numeric string fields (strict decimal-integer) ---
+
+  it("accepts a large uint256 decimal amount", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          permitted: {
+            token: validPermit2Authorization.permitted.token,
+            amount: "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+          },
+        },
+      })
+    ).not.toThrow();
+  });
+
+  it("accepts zero for validAfter", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          witness: { ...validPermit2Authorization.witness, validAfter: "0" },
+        },
+      })
+    ).not.toThrow();
+  });
+
+  it("throws when amount is in exponential notation (1.5e10)", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          permitted: { token: validPermit2Authorization.permitted.token, amount: "1.5e10" },
+        },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.permitted.amount");
+  });
+
+  it("throws when amount has a decimal point", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          permitted: { token: validPermit2Authorization.permitted.token, amount: "100.5" },
+        },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.permitted.amount");
+  });
+
+  it("throws when amount is non-numeric (abc)", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          permitted: { token: validPermit2Authorization.permitted.token, amount: "abc" },
+        },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.permitted.amount");
+  });
+
+  it("throws when amount is empty string", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          permitted: { token: validPermit2Authorization.permitted.token, amount: "" },
+        },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.permitted.amount");
+  });
+
+  it("throws when amount is negative", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          permitted: { token: validPermit2Authorization.permitted.token, amount: "-100" },
+        },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.permitted.amount");
+  });
+
+  it("throws when amount is hex-prefixed", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          permitted: { token: validPermit2Authorization.permitted.token, amount: "0x10" },
+        },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.permitted.amount");
+  });
+
+  it("throws when nonce is non-numeric", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: { ...validPermit2Authorization, nonce: "not-a-number" },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.nonce");
+  });
+
+  it("throws when deadline has whitespace", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: { ...validPermit2Authorization, deadline: " 1700000000" },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.deadline");
+  });
+
+  it("throws when validAfter is non-numeric", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          witness: { ...validPermit2Authorization.witness, validAfter: "soon" },
+        },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.witness.validAfter");
+  });
+
+  // --- witness.extra remains variable-length hex ---
+
+  it("accepts an empty witness.extra (0x)", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          witness: { ...validPermit2Authorization.witness, extra: "0x" },
+        },
+      })
+    ).not.toThrow();
+  });
+
+  it("accepts a longer witness.extra hex blob", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          witness: { ...validPermit2Authorization.witness, extra: "0xdeadbeefcafef00d" },
+        },
+      })
+    ).not.toThrow();
+  });
+
+  it("throws when witness.extra has non-hex characters", () => {
+    expect(() =>
+      parseUptoPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          witness: { ...validPermit2Authorization.witness, extra: "0xnothex" },
+        },
+      })
+    ).toThrow("UptoPayload.permit2Authorization.witness.extra");
+  });
+});
+
+describe("parseExactPayload — hardened input validation", () => {
+  it("throws on a non-hex signature (0xZZZZ)", () => {
+    expect(() =>
+      parseExactPayload({ ...validPayload, signature: "0xZZZZ" })
+    ).toThrow("ExactPayload.signature");
+  });
+
+  it("throws on an exponential amount", () => {
+    expect(() =>
+      parseExactPayload({
+        ...validPayload,
+        permit2Authorization: {
+          ...validPermit2Authorization,
+          permitted: { token: validPermit2Authorization.permitted.token, amount: "1e9" },
+        },
+      })
+    ).toThrow("ExactPayload.permit2Authorization.permitted.amount");
+  });
+
+  it("accepts a full-length real-shaped payload", () => {
+    const realisticPayload = {
+      signature: `0x${"ab".repeat(65)}`,
+      permit2Authorization: validPermit2Authorization,
+    };
+    expect(parseExactPayload(realisticPayload)).toEqual(realisticPayload);
+  });
+});
+
 describe("parseExactPayload", () => {
   it("accepts a well-formed payload", () => {
     const parsed = parseExactPayload(validPayload);

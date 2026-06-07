@@ -19,19 +19,44 @@ vi.mock("@x402cloud/evm", () => ({
     network: "eip155:84532",
     settledAmount: "10000",
   })),
+  confirmSettlement: vi.fn(async () => ({
+    success: true,
+    transaction: "0xtxhash",
+    network: "eip155:84532",
+    settledAmount: "5000",
+  })),
 }));
 
-// Mock viem to avoid real network calls
+// Mock viem to avoid real network calls. We keep encodeFunctionData + keccak256
+// REAL (so the two-step signer's hash derivation is exercised, not faked) and
+// only stub the network-touching client methods.
+const sendRawTransaction = vi.fn(async () => "0xsendresult");
+const prepareTransactionRequest = vi.fn(async (req: Record<string, unknown>) => ({
+  ...req,
+  nonce: 7,
+  gas: 21000n,
+  maxFeePerGas: 1n,
+  maxPriorityFeePerGas: 1n,
+}));
+const signTransaction = vi.fn(async () => "0xserializedrawtx" as `0x${string}`);
+const waitForTransactionReceipt = vi.fn(async () => ({
+  status: "success",
+  transactionHash: "0xtx",
+}));
+
 vi.mock("viem", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     createPublicClient: vi.fn(() => ({
       readContract: vi.fn(),
-      waitForTransactionReceipt: vi.fn(),
+      waitForTransactionReceipt,
+      sendRawTransaction,
     })),
     createWalletClient: vi.fn(() => ({
       writeContract: vi.fn(),
+      prepareTransactionRequest,
+      signTransaction,
       chain: baseSepolia,
       account: { address: "0xmock" },
     })),
@@ -158,6 +183,78 @@ describe("createFacilitator", () => {
       mockPayload,
       mockExactRequirements,
     );
+  });
+
+  it("confirm delegates to confirmSettlement from evm (one confirm for both schemes)", async () => {
+    const { confirmSettlement } = await import("@x402cloud/evm");
+    const facilitator = createFacilitator(testConfig);
+
+    const result = await facilitator.confirm("0xtxhash", "eip155:84532", "5000");
+    expect(result.success).toBe(true);
+    expect(confirmSettlement).toHaveBeenCalledWith(expect.anything(), {
+      txHash: "0xtxhash",
+      network: "eip155:84532",
+      settledAmount: "5000",
+    });
+  });
+
+  // ── Finding 1: the built signer exposes a two-step sign/send port ─────────
+  describe("built signer two-step port (Finding 1)", () => {
+    // Capture the signer createFacilitator builds by reading it off the (mocked)
+    // settleUpto call — settle(payload,...) calls settleUpto(signer, ...).
+    async function captureSigner() {
+      const { settleUpto } = await import("@x402cloud/evm");
+      (settleUpto as unknown as { mock: { calls: unknown[][] } }).mock.calls.length = 0;
+      const facilitator = createFacilitator(testConfig);
+      await facilitator.settle(mockPayload, mockRequirements, "5000");
+      const signer = (settleUpto as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0] as {
+        signSettlementTx: (p: unknown) => Promise<{ hash: string; serialized: string }>;
+        sendRawSettlementTx: (s: `0x${string}`) => Promise<void>;
+        waitForTransactionReceipt: (p: { hash: `0x${string}`; timeout?: number }) => Promise<unknown>;
+      };
+      return signer;
+    }
+
+    it("signSettlementTx signs locally and returns keccak256(serialized) as the hash (no broadcast)", async () => {
+      const { keccak256 } = await import("viem");
+      const signer = await captureSigner();
+
+      const settleAbi = [
+        { type: "function", name: "settle", stateMutability: "nonpayable", inputs: [], outputs: [] },
+      ] as const;
+      const { hash, serialized } = await signer.signSettlementTx({
+        address: "0x4020633461b2895a48930Ff97eE8fCdE8E520002",
+        abi: settleAbi,
+        functionName: "settle",
+        args: [],
+      });
+
+      expect(serialized).toBe("0xserializedrawtx");
+      expect(hash).toBe(keccak256("0xserializedrawtx"));
+      // Signing must NOT broadcast — that is sendRawSettlementTx's job (Finding 1).
+      expect(sendRawTransaction).not.toHaveBeenCalled();
+      expect(signTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("sendRawSettlementTx broadcasts the already-signed raw tx via sendRawTransaction", async () => {
+      const signer = await captureSigner();
+      sendRawTransaction.mockClear();
+
+      await signer.sendRawSettlementTx("0xserializedrawtx");
+
+      expect(sendRawTransaction).toHaveBeenCalledWith({ serializedTransaction: "0xserializedrawtx" });
+    });
+
+    it("waitForTransactionReceipt threads the bounded timeout to viem (Finding 2)", async () => {
+      const signer = await captureSigner();
+      waitForTransactionReceipt.mockClear();
+
+      await signer.waitForTransactionReceipt({ hash: "0xtx", timeout: 60_000 });
+
+      expect(waitForTransactionReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({ hash: "0xtx", timeout: 60_000 }),
+      );
+    });
   });
 
   describe("network mismatch guard", () => {

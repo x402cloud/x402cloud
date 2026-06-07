@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from "hono";
-import type { VerifyResponse, PaymentRequirements } from "@x402cloud/protocol";
+import type { VerifyResponse, SettleResponse, PaymentRequirements } from "@x402cloud/protocol";
 import type { UptoRoutesConfig, ExactRoutesConfig } from "./types.js";
 import { buildUptoMiddleware } from "./core.js";
 import { buildExactMiddleware } from "./exact-core.js";
@@ -7,16 +7,17 @@ import { createResilientFetch, type ResilientFetchConfig } from "./resilience.js
 import type { MiddlewareOptions } from "./generic-core.js";
 
 /**
- * Shared helper: create a remote verify function that POSTs to the facilitator.
- * Both upto and exact use identical verify HTTP calls.
+ * Shared helper: create a remote verify function that POSTs to a facilitator
+ * endpoint. The `path` differs by scheme (`/verify` vs `/verify-exact`).
  */
 function createRemoteVerify<TPayload>(
   baseUrl: string,
+  path: string,
   resilientFetch: typeof fetch,
 ): (payload: TPayload, requirements: PaymentRequirements) => Promise<VerifyResponse> {
   return async (payload, requirements) => {
     try {
-      const res = await resilientFetch(`${baseUrl}/verify`, {
+      const res = await resilientFetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ payload, requirements }),
@@ -32,28 +33,46 @@ function createRemoteVerify<TPayload>(
 }
 
 /**
- * Shared helper: create a remote settle function that POSTs to the facilitator.
- * The body shape differs slightly (upto includes settlementAmount, exact does not),
- * so we accept an optional body builder.
+ * Shared helper: create a remote settle function that POSTs to a facilitator
+ * endpoint. The `path` differs by scheme (`/settle` vs `/settle-exact`) and the
+ * body shape differs (upto includes settlementAmount), so we accept a body builder.
+ *
+ * Returns the facilitator's `SettleResponse` so the caller can record the
+ * outcome. Every failure mode — non-2xx, unreachable facilitator, an open
+ * circuit breaker, or an on-chain `{success:false}` — is mapped to a definite
+ * failure result rather than silently dropped. A delivered service whose
+ * settlement we cannot confirm is a reconciliation obligation, not a no-op.
  */
 function createRemoteSettle<TArgs extends unknown[]>(
   baseUrl: string,
+  path: string,
   resilientFetch: typeof fetch,
   buildBody: (...args: TArgs) => object,
-): (...args: TArgs) => Promise<void> {
+): (...args: TArgs) => Promise<SettleResponse> {
   return async (...args) => {
+    let res: Response;
     try {
-      const res = await resilientFetch(`${baseUrl}/settle`, {
+      res = await resilientFetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildBody(...args)),
       });
-      if (!res.ok) {
-        return;
-      }
-      await res.json();
     } catch (err) {
-      console.error("x402 remote settlement failed:", err);
+      return {
+        success: false,
+        errorReason: `facilitator_unreachable: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    if (!res.ok) {
+      return { success: false, errorReason: `facilitator_http_${res.status}` };
+    }
+    try {
+      return (await res.json()) as SettleResponse;
+    } catch (err) {
+      return {
+        success: false,
+        errorReason: `facilitator_bad_response: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
   };
 }
@@ -76,8 +95,8 @@ export function remoteUptoPaymentMiddleware(
 
   return buildUptoMiddleware(
     routes,
-    createRemoteVerify(baseUrl, resilientFetch),
-    createRemoteSettle(baseUrl, resilientFetch, (payload, requirements, settlementAmount) => ({
+    createRemoteVerify(baseUrl, "/verify", resilientFetch),
+    createRemoteSettle(baseUrl, "/settle", resilientFetch, (payload, requirements, settlementAmount) => ({
       payload,
       requirements,
       settlementAmount,
@@ -104,8 +123,8 @@ export function remoteExactPaymentMiddleware(
 
   return buildExactMiddleware(
     routes,
-    createRemoteVerify(baseUrl, resilientFetch),
-    createRemoteSettle(baseUrl, resilientFetch, (payload, requirements) => ({
+    createRemoteVerify(baseUrl, "/verify-exact", resilientFetch),
+    createRemoteSettle(baseUrl, "/settle-exact", resilientFetch, (payload, requirements) => ({
       payload,
       requirements,
     })),

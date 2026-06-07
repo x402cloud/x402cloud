@@ -6,7 +6,8 @@
     "test": "turbo test",
     "typecheck": "turbo typecheck",
     "clean": "turbo clean",
-    "dev": "turbo dev"
+    "dev": "turbo dev",
+    "smoke:sepolia": "pnpm --filter x402cloud-scripts smoke"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^3.2.4",

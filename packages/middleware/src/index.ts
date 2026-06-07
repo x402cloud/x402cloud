@@ -1,6 +1,14 @@
 // Generic payment processing (strategy pattern)
-export { processPayment, buildMiddleware, redactSignature } from "./generic-core.js";
-export type { PaymentStrategy, PaymentFlowResult, SettlementIntent, OnSettlementIntent, MiddlewareOptions } from "./generic-core.js";
+export { processPayment, buildMiddleware, runSettlement, redactSignature } from "./generic-core.js";
+export type {
+  PaymentStrategy,
+  PaymentFlowResult,
+  SettlementIntent,
+  OnSettlementIntent,
+  SettlementOutcome,
+  OnSettlementResult,
+  MiddlewareOptions,
+} from "./generic-core.js";
 
 // Framework-agnostic upto/exact wrappers (backward compatible)
 export { processUptoPayment } from "./core.js";
@@ -18,6 +26,9 @@ export type { CircuitBreaker, BreakerEvent } from "./resilience.js";
 
 // Response builders
 export { buildPaymentRequired, buildExactPaymentRequired } from "./response.js";
+
+// Margin helpers for marketplace merchant-of-record model
+export { applyMargin, clampToAuthorized, retailPrice, DEFAULT_MARGIN_BPS } from "./margin.js";
 
 // Types
 export type { VerifyFn, SettleFn } from "./core.js";

@@ -6,7 +6,7 @@ import {
 } from "../constants.js";
 import { parseChainId, parseUnixSeconds } from "../utils.js";
 import { verifyPermit2Signature } from "../shared.js";
-import { sanitizeErrorMessage } from "../errors.js";
+import { broadcastAndConfirm } from "../settle-shared.js";
 
 /**
  * Settle an upto payment on-chain for the actual metered amount.
@@ -62,9 +62,12 @@ export async function settleUpto(
     return { success: false, errorReason: "signature_check_failed" };
   }
 
-  // Call the upto proxy's settle() function
-  try {
-    const txHash = await signer.writeContract({
+  // Sign → send → confirm (Finding 1). The shared helper separates SIGNING (no
+  // network — a throw means no tx) from SENDING (a throw may leave a live tx, so
+  // it returns settlement_pending_receipt:<hash> to CONFIRM, never re-broadcast).
+  return broadcastAndConfirm(
+    signer,
+    {
       address: X402_UPTO_PROXY,
       abi: uptoProxyAbi,
       functionName: "settle",
@@ -86,28 +89,7 @@ export async function settleUpto(
         },
         signature,
       ],
-    });
-
-    // Wait for confirmation
-    const receipt = await signer.waitForTransactionReceipt({ hash: txHash });
-
-    if (receipt.status === "reverted") {
-      return {
-        success: false,
-        errorReason: `transaction_reverted: ${txHash}`,
-      };
-    }
-
-    return {
-      success: true,
-      transaction: txHash,
-      network: requirements.network,
-      settledAmount: settlementAmount,
-    };
-  } catch (err) {
-    return {
-      success: false,
-      errorReason: `settlement_failed: ${sanitizeErrorMessage(err)}`,
-    };
-  }
+    },
+    { network: requirements.network, settledAmount: settlementAmount },
+  );
 }

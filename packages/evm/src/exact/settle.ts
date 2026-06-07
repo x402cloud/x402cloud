@@ -6,7 +6,7 @@ import {
 } from "../constants.js";
 import { parseChainId, parseUnixSeconds } from "../utils.js";
 import { verifyPermit2Signature } from "../shared.js";
-import { sanitizeErrorMessage } from "../errors.js";
+import { broadcastAndConfirm } from "../settle-shared.js";
 
 /**
  * Settle an exact payment on-chain for the full authorized amount.
@@ -40,9 +40,13 @@ export async function settleExact(
     return { success: false, errorReason: "signature_check_failed" };
   }
 
-  // Call the exact proxy's settle() function (no amount param — settles full authorization)
-  try {
-    const txHash = await signer.writeContract({
+  // Sign → send → confirm (Finding 1). The shared helper separates SIGNING (no
+  // network — a throw means no tx) from SENDING (a throw may leave a live tx, so
+  // it returns settlement_pending_receipt:<hash> to CONFIRM, never re-broadcast).
+  // No amount param — exact settles the full authorization.
+  return broadcastAndConfirm(
+    signer,
+    {
       address: X402_EXACT_PROXY,
       abi: exactProxyAbi,
       functionName: "settle",
@@ -63,28 +67,7 @@ export async function settleExact(
         },
         signature,
       ],
-    });
-
-    // Wait for confirmation
-    const receipt = await signer.waitForTransactionReceipt({ hash: txHash });
-
-    if (receipt.status === "reverted") {
-      return {
-        success: false,
-        errorReason: `transaction_reverted: ${txHash}`,
-      };
-    }
-
-    return {
-      success: true,
-      transaction: txHash,
-      network: requirements.network,
-      settledAmount: permitted.amount,
-    };
-  } catch (err) {
-    return {
-      success: false,
-      errorReason: `settlement_failed: ${sanitizeErrorMessage(err)}`,
-    };
-  }
+    },
+    { network: requirements.network, settledAmount: permitted.amount },
+  );
 }

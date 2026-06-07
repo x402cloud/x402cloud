@@ -24,3 +24,5 @@ export {
 } from "./headers.js";
 
 export type { ModelType } from "./models.js";
+
+export type { MarketplaceService, Catalog } from "./catalog.js";

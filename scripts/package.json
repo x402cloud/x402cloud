@@ -1,0 +1,21 @@
+{
+  "name": "x402cloud-scripts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "smoke": "tsx sepolia-smoke.ts",
+    "verify:mainnet": "tsx verify-mainnet-proxies.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@x402cloud/agent": "workspace:*",
+    "@x402cloud/evm": "workspace:*",
+    "viem": "^2.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  }
+}

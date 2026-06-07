@@ -59,9 +59,50 @@ export type VerifySigner = {
   }) => Promise<boolean>;
 };
 
-/** Full signer — verification + settlement (needs private key for writes) */
+/**
+ * Full signer — verification + settlement (needs private key for writes).
+ *
+ * Settlement uses a TWO-STEP port — sign then send — so a send-time throw still
+ * hands back a confirmable tx hash (Finding 1). `eth_sendRawTransaction` can
+ * land the signed tx in the mempool and THEN lose the HTTP response: the throw
+ * is NOT proof that no tx exists. Splitting SIGNING (deterministic hash, no
+ * network) from SENDING lets settle classify a lost-response send as
+ * pending-receipt (confirm the known hash) rather than failed (re-broadcast,
+ * which double-spends the single-use nonce and reverts = lost revenue).
+ *
+ * - signSettlementTx: pure local signing — yields the deterministic tx hash and
+ *   the serialized raw tx. No network call, so a throw here truly means no tx.
+ * - sendRawSettlementTx: broadcasts the already-signed raw tx. A throw here may
+ *   leave a live tx; callers must CONFIRM the hash, never re-sign/re-broadcast.
+ *
+ * `writeContract` is retained for callers that build a signer without the
+ * two-step port (e.g. local-middleware composition); settle falls back to it
+ * only when signSettlementTx is absent. New code (the hosted facilitator) should
+ * provide the two-step port so the Finding 1 protection applies.
+ */
 export type FacilitatorSigner = VerifySigner & {
-  writeContract: (params: {
+  /**
+   * Sign (but do NOT send) a settlement tx. Returns the deterministic tx hash
+   * and the serialized raw tx. Pure local crypto — no network, so a throw here
+   * means no tx was ever created (safe to retry as a fresh broadcast).
+   */
+  signSettlementTx?: (params: {
+    address: `0x${string}`;
+    abi: readonly unknown[];
+    functionName: string;
+    args: readonly unknown[];
+  }) => Promise<{ hash: `0x${string}`; serialized: `0x${string}` }>;
+  /**
+   * Broadcast an already-signed raw tx. A throw may leave a live tx in the
+   * mempool — the caller holds the hash and must CONFIRM it, never re-broadcast.
+   */
+  sendRawSettlementTx?: (serialized: `0x${string}`) => Promise<void>;
+  /**
+   * Legacy one-shot sign+send. Used only as a fallback when signSettlementTx is
+   * not provided. A throw here is ambiguous (the tx may or may not have been
+   * broadcast), which is exactly the Finding 1 hazard the two-step port avoids.
+   */
+  writeContract?: (params: {
     address: `0x${string}`;
     abi: readonly unknown[];
     functionName: string;
@@ -69,5 +110,11 @@ export type FacilitatorSigner = VerifySigner & {
   }) => Promise<`0x${string}`>;
   waitForTransactionReceipt: (params: {
     hash: `0x${string}`;
+    /**
+     * Max time (ms) to wait for the receipt. Settle passes an explicit, bounded
+     * timeout so the worst-case settle wall-clock stays below the in_flight
+     * lease (Finding 2). Omitted → the implementation's own default.
+     */
+    timeout?: number;
   }) => Promise<{ status: "success" | "reverted"; transactionHash: `0x${string}` }>;
 };

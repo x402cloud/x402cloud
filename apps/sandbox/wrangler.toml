@@ -1,0 +1,28 @@
+name = "x402cloud-sandbox"
+main = "src/worker.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NETWORK = "eip155:84532"
+FACILITATOR_URL = "https://facilitator.x402cloud.ai"
+OPERATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
+
+[route]
+pattern = "sandbox.x402cloud.ai"
+custom_domain = true
+
+# Cloudflare Sandbox SDK bindings — see sandbox-sdk skill docs.
+[[containers]]
+class_name = "Sandbox"
+image = "./Dockerfile"
+instance_type = "lite"
+max_instances = 1
+
+[[durable_objects.bindings]]
+class_name = "Sandbox"
+name = "Sandbox"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Sandbox"]

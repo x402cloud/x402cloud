@@ -1,17 +1,15 @@
 import { describe, it, expect } from "vitest";
+import { retailPrice, DEFAULT_MARGIN_BPS } from "@x402cloud/middleware";
 import { createMeter } from "../src/meter.js";
 import { MODELS } from "../src/models.js";
 import {
-  computeTextCost,
-  computeEmbedCost,
-  computeImageCost,
+  wholesaleTextCost,
+  wholesaleEmbedCost,
+  wholesaleImageCost,
 } from "../src/pricing.js";
 
 const PAYER = "0x0000000000000000000000000000000000000001";
-
-function toMicro(cost: number): string {
-  return Math.round(cost * 1e6).toString();
-}
+const HIGH_AUTH = "1000000000"; // 1000 USDC — well above any unit-test cost
 
 function makeRequest(body: unknown): Request {
   return new Request("https://infer.test/v1/chat/completions", {
@@ -28,20 +26,28 @@ function makeResponse(body: unknown): Response {
   });
 }
 
+/**
+ * Expected cost = retailPrice(wholesale, authorized, DEFAULT_MARGIN_BPS).
+ * Same pipeline the meter runs — no float math, no separate clamp.
+ */
+function expectedRetail(wholesale: string, authorized: string): string {
+  return retailPrice(wholesale, authorized, DEFAULT_MARGIN_BPS);
+}
+
 describe("createMeter", () => {
   it("throws for unknown model", () => {
     expect(() => createMeter("not-a-real-model")).toThrow(/Unknown model/);
   });
 
-  it("image model returns flat per-generation cost", async () => {
+  it("image model returns flat per-generation retail cost", async () => {
     const meter = createMeter("image");
     const cost = await meter({
       request: makeRequest({ prompt: "a cat" }),
       response: makeResponse({ image: "base64..." }),
-      authorizedAmount: "1000000000",
+      authorizedAmount: HIGH_AUTH,
       payer: PAYER,
     });
-    expect(cost).toBe(toMicro(computeImageCost()));
+    expect(cost).toBe(expectedRetail(wholesaleImageCost(), HIGH_AUTH));
   });
 
   it("embed model estimates input tokens from `input` field", async () => {
@@ -50,11 +56,11 @@ describe("createMeter", () => {
     const cost = await meter({
       request: makeRequest({ input: text }),
       response: makeResponse({ data: [] }),
-      authorizedAmount: "1000000000",
+      authorizedAmount: HIGH_AUTH,
       payer: PAYER,
     });
-    const expected = toMicro(computeEmbedCost(MODELS.embed.neurons, 3));
-    expect(cost).toBe(expected);
+    const wholesale = wholesaleEmbedCost(MODELS.embed.neurons, 3);
+    expect(cost).toBe(expectedRetail(wholesale, HIGH_AUTH));
   });
 
   it("embed model sums tokens across array input", async () => {
@@ -62,11 +68,11 @@ describe("createMeter", () => {
     const cost = await meter({
       request: makeRequest({ input: ["abcd", "efgh"] }), // 1 + 1 tokens
       response: makeResponse({}),
-      authorizedAmount: "1000000000",
+      authorizedAmount: HIGH_AUTH,
       payer: PAYER,
     });
-    const expected = toMicro(computeEmbedCost(MODELS.embed.neurons, 2));
-    expect(cost).toBe(expected);
+    const wholesale = wholesaleEmbedCost(MODELS.embed.neurons, 2);
+    expect(cost).toBe(expectedRetail(wholesale, HIGH_AUTH));
   });
 
   it("embed model handles missing input body gracefully", async () => {
@@ -74,12 +80,12 @@ describe("createMeter", () => {
     const cost = await meter({
       request: new Request("https://infer.test/", { method: "POST", body: "not json" }),
       response: makeResponse({}),
-      authorizedAmount: "1000000000",
+      authorizedAmount: HIGH_AUTH,
       payer: PAYER,
     });
-    // 0 tokens -> BASE_FEE only
-    const expected = toMicro(computeEmbedCost(MODELS.embed.neurons, 0));
-    expect(cost).toBe(expected);
+    // 0 tokens -> 0 wholesale -> 0 retail
+    const wholesale = wholesaleEmbedCost(MODELS.embed.neurons, 0);
+    expect(cost).toBe(expectedRetail(wholesale, HIGH_AUTH));
   });
 
   it("text model prefers usage fields when provided", async () => {
@@ -90,11 +96,11 @@ describe("createMeter", () => {
         choices: [{ message: { content: "hello back" } }],
         usage: { prompt_tokens: 123, completion_tokens: 456 },
       }),
-      authorizedAmount: "1000000000",
+      authorizedAmount: HIGH_AUTH,
       payer: PAYER,
     });
-    const expected = toMicro(computeTextCost(MODELS.fast.neurons, 123, 456));
-    expect(cost).toBe(expected);
+    const wholesale = wholesaleTextCost(MODELS.fast.neurons, 123, 456);
+    expect(cost).toBe(expectedRetail(wholesale, HIGH_AUTH));
   });
 
   it("text model falls back to char estimation when usage missing", async () => {
@@ -104,11 +110,11 @@ describe("createMeter", () => {
     const cost = await meter({
       request: makeRequest({ messages: [{ role: "user", content: inputText }] }),
       response: makeResponse({ response: outputText }),
-      authorizedAmount: "1000000000",
+      authorizedAmount: HIGH_AUTH,
       payer: PAYER,
     });
-    const expected = toMicro(computeTextCost(MODELS.nano.neurons, 2, 2));
-    expect(cost).toBe(expected);
+    const wholesale = wholesaleTextCost(MODELS.nano.neurons, 2, 2);
+    expect(cost).toBe(expectedRetail(wholesale, HIGH_AUTH));
   });
 
   it("text model extracts output from choices[].message.content", async () => {
@@ -118,15 +124,15 @@ describe("createMeter", () => {
       response: makeResponse({
         choices: [{ message: { content: "abcd" } }],
       }),
-      authorizedAmount: "1000000000",
+      authorizedAmount: HIGH_AUTH,
       payer: PAYER,
     });
     // input "a" -> 1 token, output "abcd" -> 1 token
-    const expected = toMicro(computeTextCost(MODELS.nano.neurons, 1, 1));
-    expect(cost).toBe(expected);
+    const wholesale = wholesaleTextCost(MODELS.nano.neurons, 1, 1);
+    expect(cost).toBe(expectedRetail(wholesale, HIGH_AUTH));
   });
 
-  it("caps cost at authorizedAmount", async () => {
+  it("caps cost at authorizedAmount via retailPrice", async () => {
     const meter = createMeter("big");
     const cost = await meter({
       request: makeRequest({
@@ -149,11 +155,24 @@ describe("createMeter", () => {
         response: "wxyz",
         usage: { prompt_tokens: 999 }, // missing completion_tokens
       }),
-      authorizedAmount: "1000000000",
+      authorizedAmount: HIGH_AUTH,
       payer: PAYER,
     });
     // Should fall back to char estimation: 1 + 1
-    const expected = toMicro(computeTextCost(MODELS.nano.neurons, 1, 1));
-    expect(cost).toBe(expected);
+    const wholesale = wholesaleTextCost(MODELS.nano.neurons, 1, 1);
+    expect(cost).toBe(expectedRetail(wholesale, HIGH_AUTH));
+  });
+
+  it("respects an explicit marginBps override", async () => {
+    const meter = createMeter("fast", 0); // zero margin -> retail == wholesale
+    const cost = await meter({
+      request: makeRequest({ messages: [{ role: "user", content: "hi" }] }),
+      response: makeResponse({
+        usage: { prompt_tokens: 500, completion_tokens: 2000 },
+      }),
+      authorizedAmount: HIGH_AUTH,
+      payer: PAYER,
+    });
+    expect(cost).toBe(wholesaleTextCost(MODELS.fast.neurons, 500, 2000));
   });
 });

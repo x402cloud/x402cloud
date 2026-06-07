@@ -18,8 +18,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@x402cloud/protocol": "workspace:*",
-    "@x402cloud/evm": "workspace:*"
+    "@x402cloud/protocol": "workspace:^",
+    "@x402cloud/evm": "workspace:^"
   },
   "peerDependencies": {
     "hono": "^4.7.0"
@@ -30,7 +30,8 @@
     "vitest": "^3.0.0"
   },
   "license": "MIT",
-  "files": ["dist"],
+  "sideEffects": false,
+  "files": ["dist", "!dist/**/*.test.*"],
   "publishConfig": {
     "access": "public"
   },

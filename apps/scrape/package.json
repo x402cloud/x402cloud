@@ -1,0 +1,36 @@
+{
+  "name": "scrape",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Browser-rendered scraping (markdown + screenshot) at scrape.x402cloud.ai with per-request x402 billing",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --remote",
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@x402cloud/protocol": "workspace:*",
+    "@x402cloud/evm": "workspace:*",
+    "@x402cloud/middleware": "workspace:*",
+    "@x402cloud/discovery": "workspace:*",
+    "@x402cloud/manifests": "workspace:*",
+    "@cloudflare/puppeteer": "^0.0.14",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4",
+    "wrangler": "^3.100.0",
+    "@cloudflare/workers-types": "^4.20250214.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x402cloud/x402cloud.git",
+    "directory": "apps/scrape"
+  },
+  "author": "x402cloud.ai"
+}

@@ -2,12 +2,13 @@ import type { MiddlewareHandler } from "hono";
 import {
   parseUsdcAmount,
   type VerifyResponse,
+  type SettleResponse,
   type PaymentRequirements,
 } from "@x402cloud/protocol";
 import { type ExactPayload, parseExactPayload } from "@x402cloud/evm";
 import type { ExactRoutesConfig } from "./types.js";
 import { buildExactPaymentRequired } from "./response.js";
-import { processPayment, buildMiddleware, type PaymentStrategy, type PaymentFlowResult, type MiddlewareOptions } from "./generic-core.js";
+import { processPayment, buildMiddleware, runSettlement, type PaymentStrategy, type PaymentFlowResult, type MiddlewareOptions, type SettlementIntent } from "./generic-core.js";
 
 /** Verify function: takes payload + requirements, returns verification result */
 export type ExactVerifyFn = (
@@ -15,11 +16,15 @@ export type ExactVerifyFn = (
   requirements: PaymentRequirements,
 ) => Promise<VerifyResponse>;
 
-/** Settle function: takes payload + requirements, settles for full amount */
+/**
+ * Settle function: takes payload + requirements, settles for full amount and
+ * returns the on-chain outcome so the middleware can record whether payment
+ * was actually collected.
+ */
 export type ExactSettleFn = (
   payload: ExactPayload,
   requirements: PaymentRequirements,
-) => Promise<void>;
+) => Promise<SettleResponse>;
 
 /** Build the exact payment strategy from verify/settle functions */
 function exactStrategy(verify: ExactVerifyFn, settle: ExactSettleFn): PaymentStrategy<ExactRoutesConfig[string], ExactPayload> {
@@ -36,8 +41,9 @@ function exactStrategy(verify: ExactVerifyFn, settle: ExactSettleFn): PaymentStr
           return null;
         }
 
-        // Record settlement intent before firing (if hook provided)
-        const intent = {
+        // One settlement intent: its id ties the pre-fire record to the
+        // post-resolve outcome, and it carries the payload for onSettlementError.
+        const intent: SettlementIntent = {
           id: crypto.randomUUID(),
           payload,
           requirements,
@@ -45,25 +51,16 @@ function exactStrategy(verify: ExactVerifyFn, settle: ExactSettleFn): PaymentStr
           scheme: "exact",
           createdAt: Date.now(),
         };
+
+        // Record settlement intent before firing (if hook provided).
         if (options?.onSettlementIntent) {
           await options.onSettlementIntent(intent);
         }
 
-        // Settle for full price (fire-and-forget — use waitUntil if available for durability)
-        const settlePromise = settle(payload, requirements).catch(async (err) => {
-          if (options?.onSettlementError) {
-            try {
-              await options.onSettlementError(err, intent);
-            } catch (cbErr) {
-              console.error("x402 onSettlementError callback failed:", cbErr);
-            }
-          } else {
-            console.error("x402 exact settlement failed:", err);
-          }
-        });
-        if (options?.waitUntil) {
-          options.waitUntil(settlePromise);
-        }
+        // Settle as a durable background task — outcome recorded via
+        // onSettlementResult, thrown settle forwarded to onSettlementError,
+        // waitUntil keeps it alive. Never swallowed.
+        runSettlement(() => settle(payload, requirements), intent, options);
 
         return { settledAmount, payer: verification.payer };
       };
