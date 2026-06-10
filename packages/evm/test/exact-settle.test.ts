@@ -36,7 +36,6 @@ function makePayload(): ExactPayload {
       witness: {
         to: PAY_TO,
         validAfter: (now - 60).toString(),
-        extra: "0x",
       },
     },
   };

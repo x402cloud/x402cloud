@@ -1,4 +1,5 @@
-import type { Permit2Authorization, UptoPayload, ExactPayload } from "./types.js";
+import type { Permit2Authorization, Permit2Witness, UptoPayload, ExactPayload } from "./types.js";
+import { UPTO_WITNESS_FIELDS, EXACT_WITNESS_FIELDS, type WitnessField } from "./constants.js";
 
 /** Variable-length hex string: 0x followed by zero or more hex digits. */
 const HEX_RE = /^0x[0-9a-fA-F]*$/;
@@ -68,8 +69,14 @@ function assertObject(value: unknown, field: string): asserts value is Record<st
 
 /**
  * Validate and parse a Permit2Authorization from unknown data.
+ * Witness validation is data-driven by the scheme's witness field list:
+ * `address` fields must be 20-byte hex, `uint256` fields decimal strings.
  */
-function parsePermit2Authorization(raw: unknown, path: string): Permit2Authorization {
+function parsePermit2Authorization<W extends Permit2Witness>(
+  raw: unknown,
+  path: string,
+  witnessFields: readonly WitnessField[],
+): Permit2Authorization<W> {
   assertObject(raw, path);
 
   assertAddress(raw.from, `${path}.from`);
@@ -82,13 +89,18 @@ function parsePermit2Authorization(raw: unknown, path: string): Permit2Authoriza
   assertAddress(raw.permitted.token, `${path}.permitted.token`);
   assertDecimalUint(raw.permitted.amount, `${path}.permitted.amount`);
 
-  // witness
+  // witness — shape varies by scheme, validated against its field list
   assertObject(raw.witness, `${path}.witness`);
-  assertAddress(raw.witness.to, `${path}.witness.to`);
-  assertDecimalUint(raw.witness.validAfter, `${path}.witness.validAfter`);
-  assertHexString(raw.witness.extra, `${path}.witness.extra`);
+  for (const field of witnessFields) {
+    const value = raw.witness[field.name];
+    if (field.type === "address") {
+      assertAddress(value, `${path}.witness.${field.name}`);
+    } else {
+      assertDecimalUint(value, `${path}.witness.${field.name}`);
+    }
+  }
 
-  return raw as unknown as Permit2Authorization;
+  return raw as unknown as Permit2Authorization<W>;
 }
 
 /**
@@ -101,7 +113,7 @@ function parsePermit2Authorization(raw: unknown, path: string): Permit2Authoriza
 export function parseUptoPayload(raw: unknown): UptoPayload {
   assertObject(raw, "UptoPayload");
   assertHexString(raw.signature, "UptoPayload.signature");
-  const permit2Authorization = parsePermit2Authorization(raw.permit2Authorization, "UptoPayload.permit2Authorization");
+  const permit2Authorization = parsePermit2Authorization<UptoPayload["permit2Authorization"]["witness"]>(raw.permit2Authorization, "UptoPayload.permit2Authorization", UPTO_WITNESS_FIELDS);
   return { signature: raw.signature as `0x${string}`, permit2Authorization };
 }
 
@@ -115,6 +127,6 @@ export function parseUptoPayload(raw: unknown): UptoPayload {
 export function parseExactPayload(raw: unknown): ExactPayload {
   assertObject(raw, "ExactPayload");
   assertHexString(raw.signature, "ExactPayload.signature");
-  const permit2Authorization = parsePermit2Authorization(raw.permit2Authorization, "ExactPayload.permit2Authorization");
+  const permit2Authorization = parsePermit2Authorization<ExactPayload["permit2Authorization"]["witness"]>(raw.permit2Authorization, "ExactPayload.permit2Authorization", EXACT_WITNESS_FIELDS);
   return { signature: raw.signature as `0x${string}`, permit2Authorization };
 }

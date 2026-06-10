@@ -43,6 +43,8 @@ type Bindings = {
   AI: Ai;
   NETWORK: string;
   FACILITATOR_URL: string;
+  /** Settlement wallet address of the facilitator (its /supported `facilitator` field). Advertised to clients as `extra.facilitator` — the canonical upto witness binds it. */
+  FACILITATOR_ADDRESS: `0x${string}`;
   /** Optional. Comma-separated CORS allow-list, e.g. "https://x402cloud.ai,https://app.x402cloud.ai". Default: "*". */
   CORS_ALLOWED_ORIGINS?: string;
   /** Optional rate-limit binding. */
@@ -320,6 +322,7 @@ function buildDeps(env: Bindings): Deps {
   const middleware = remoteUptoPaymentMiddleware(
     buildRoutes(network),
     env.FACILITATOR_URL,
+    env.FACILITATOR_ADDRESS,
     undefined,
     buildSettlementOptions(env),
   );
@@ -509,7 +512,7 @@ curl -X POST https://infer.x402cloud.ai/v1/chat/completions \\
 let cache: { readonly app: Hono<Env>; readonly key: string } | null = null;
 
 function depsKey(env: Bindings): string {
-  return `${env.NETWORK}|${env.FACILITATOR_URL}`;
+  return `${env.NETWORK}|${env.FACILITATOR_URL}|${env.FACILITATOR_ADDRESS}`;
 }
 
 function getApp(env: Bindings): Hono<Env> {

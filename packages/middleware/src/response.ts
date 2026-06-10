@@ -16,6 +16,7 @@ function buildPaymentRequiredResponse(
   asset: string | undefined,
   maxTimeoutSeconds: number | undefined,
   description: string | undefined,
+  extra?: Record<string, unknown>,
 ): PaymentRequired {
   const resolvedAsset = asset ?? DEFAULT_USDC_ADDRESSES[network];
   if (!resolvedAsset) {
@@ -29,6 +30,7 @@ function buildPaymentRequiredResponse(
     maxAmount: parseUsdcAmount(priceString),
     payTo,
     maxTimeoutSeconds: maxTimeoutSeconds ?? 300,
+    ...(extra ? { extra } : {}),
   };
 
   const resource: ResourceInfo = {
@@ -43,10 +45,17 @@ function buildPaymentRequiredResponse(
   };
 }
 
-/** Build a 402 PaymentRequired response from upto route config */
+/**
+ * Build a 402 PaymentRequired response from upto route config.
+ *
+ * `facilitator` is the settlement wallet address, advertised as
+ * `extra.facilitator`: the canonical upto proxy witness binds the one address
+ * allowed to settle, so clients need it at signing time.
+ */
 export function buildPaymentRequired(
   routeConfig: UptoRouteConfig,
   resourceUrl: string,
+  facilitator: `0x${string}`,
 ): PaymentRequired {
   return buildPaymentRequiredResponse(
     "upto",
@@ -57,6 +66,7 @@ export function buildPaymentRequired(
     routeConfig.asset,
     routeConfig.maxTimeoutSeconds,
     routeConfig.description,
+    { facilitator },
   );
 }
 

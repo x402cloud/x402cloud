@@ -37,6 +37,7 @@ vi.mock("@x402cloud/evm", async () => {
 });
 
 const TEST_PAY_TO = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88";
+const FACILITATOR = "0x9999999999999999999999999999999999999999" as const;
 
 function makeRoutes(): UptoRoutesConfig {
   return {
@@ -62,8 +63,8 @@ function makePaymentPayload(): { x402Version: number; payload: UptoPayload } {
         deadline: "9999999999",
         witness: {
           to: TEST_PAY_TO as `0x${string}`,
+          facilitator: "0x9999999999999999999999999999999999999999" as `0x${string}`,
           validAfter: "0",
-          extra: "0x" as `0x${string}`,
         },
       },
     },
@@ -87,7 +88,7 @@ describe("processUptoPayment (framework-agnostic)", () => {
     const routes = makeRoutes();
     const request = new Request("http://localhost/health", { method: "GET" });
 
-    const result = await processUptoPayment("GET", "/health", request, routes, verifyFn, settleFn);
+    const result = await processUptoPayment("GET", "/health", request, routes, verifyFn, settleFn, FACILITATOR);
 
     expect(result.action).toBe("pass");
     expect(verifyFn).not.toHaveBeenCalled();
@@ -97,7 +98,7 @@ describe("processUptoPayment (framework-agnostic)", () => {
     const routes = makeRoutes();
     const request = new Request("http://localhost/v1/chat/completions", { method: "POST" });
 
-    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn);
+    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn, FACILITATOR);
 
     expect(result.action).toBe("payment_required");
     if (result.action === "payment_required") {
@@ -114,7 +115,7 @@ describe("processUptoPayment (framework-agnostic)", () => {
       headers: { "PAYMENT-SIGNATURE": "not-valid-base64!!!" },
     });
 
-    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn);
+    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn, FACILITATOR);
 
     expect(result.action).toBe("error");
     if (result.action === "error") {
@@ -133,7 +134,7 @@ describe("processUptoPayment (framework-agnostic)", () => {
       headers: { "PAYMENT-SIGNATURE": encoded },
     });
 
-    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn);
+    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn, FACILITATOR);
 
     expect(result.action).toBe("verified");
     if (result.action === "verified") {
@@ -154,7 +155,7 @@ describe("processUptoPayment (framework-agnostic)", () => {
       headers: { "PAYMENT-SIGNATURE": encoded },
     });
 
-    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn);
+    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn, FACILITATOR);
 
     expect(result.action).toBe("verified");
     if (result.action === "verified") {
@@ -181,7 +182,7 @@ describe("processUptoPayment (framework-agnostic)", () => {
       headers: { "PAYMENT-SIGNATURE": encoded },
     });
 
-    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn);
+    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn, FACILITATOR);
 
     expect(result.action).toBe("verified");
     if (result.action === "verified") {
@@ -209,7 +210,7 @@ describe("processUptoPayment (framework-agnostic)", () => {
       headers: { "PAYMENT-SIGNATURE": encoded },
     });
 
-    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, failVerify, settleFn);
+    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, failVerify, settleFn, FACILITATOR);
 
     expect(result.action).toBe("invalid_payment");
     if (result.action === "invalid_payment") {
@@ -234,7 +235,7 @@ describe("processUptoPayment (framework-agnostic)", () => {
       headers: { "PAYMENT-SIGNATURE": encoded },
     });
 
-    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, failVerify, settleFn);
+    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, failVerify, settleFn, FACILITATOR);
 
     expect(result.action).toBe("invalid_payment");
     if (result.action === "invalid_payment") {
@@ -254,7 +255,7 @@ describe("processUptoPayment (framework-agnostic)", () => {
 
     const request = new Request("http://localhost/v1/chat/completions", { method: "POST" });
 
-    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn);
+    const result = await processUptoPayment("POST", "/v1/chat/completions", request, routes, verifyFn, settleFn, FACILITATOR);
 
     expect(result.action).toBe("error");
     if (result.action === "error") {

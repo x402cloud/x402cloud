@@ -1,6 +1,6 @@
 import type { PaymentRequirements } from "@x402cloud/protocol";
-import type { ClientSigner, ExactPayload } from "../types.js";
-import { X402_EXACT_PROXY } from "../constants.js";
+import type { ClientSigner, ExactPayload, ExactWitness } from "../types.js";
+import { X402_EXACT_PROXY, EXACT_WITNESS_FIELDS } from "../constants.js";
 import { createPermit2Payload } from "../shared.js";
 
 /**
@@ -11,5 +11,5 @@ export async function createExactPayload(
   signer: ClientSigner,
   requirements: PaymentRequirements,
 ): Promise<ExactPayload> {
-  return createPermit2Payload(signer, requirements, X402_EXACT_PROXY);
+  return createPermit2Payload<ExactWitness>(signer, requirements, X402_EXACT_PROXY, EXACT_WITNESS_FIELDS, {});
 }

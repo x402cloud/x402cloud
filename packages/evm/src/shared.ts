@@ -1,17 +1,33 @@
 import type { PaymentRequirements, VerifyResponse } from "@x402cloud/protocol";
-import type { VerifySigner, ClientSigner, Permit2Authorization } from "./types.js";
+import type { VerifySigner, ClientSigner, Permit2Authorization, Permit2Witness } from "./types.js";
 import {
   PERMIT2_ADDRESS,
   permit2Domain,
   permit2WitnessTypes,
   erc20Abi,
+  type WitnessField,
 } from "./constants.js";
 import { parseChainId, parseUnixSeconds } from "./utils.js";
+
+/**
+ * Convert a witness record (string values, as transported in JSON) into the
+ * EIP-712 message shape, driven by the scheme's witness field list:
+ * `uint256` fields become bigint, `address` fields pass through.
+ */
+function witnessMessage(
+  witnessFields: readonly WitnessField[],
+  witness: Record<string, string>,
+): Record<string, string | bigint> {
+  return Object.fromEntries(
+    witnessFields.map((f) => [f.name, f.type === "uint256" ? BigInt(witness[f.name]) : witness[f.name]]),
+  );
+}
 
 /**
  * Verify the EIP-712 Permit2 signature.
  * Used by both upto and exact verify/settle.
  * @param spender - proxy contract address (upto or exact)
+ * @param witnessFields - the scheme's Witness struct fields
  */
 export async function verifyPermit2Signature(
   signer: Pick<VerifySigner, "verifyTypedData">,
@@ -19,12 +35,13 @@ export async function verifyPermit2Signature(
   signature: `0x${string}`,
   chainId: number,
   spender: `0x${string}`,
+  witnessFields: readonly WitnessField[],
 ): Promise<boolean> {
   const { from, permitted, nonce, deadline, witness } = authorization;
   return signer.verifyTypedData({
     address: from,
     domain: permit2Domain(chainId),
-    types: permit2WitnessTypes,
+    types: permit2WitnessTypes(witnessFields),
     primaryType: "PermitWitnessTransferFrom",
     message: {
       permitted: {
@@ -34,11 +51,7 @@ export async function verifyPermit2Signature(
       spender,
       nonce: BigInt(nonce),
       deadline: BigInt(deadline),
-      witness: {
-        to: witness.to,
-        validAfter: BigInt(witness.validAfter),
-        extra: witness.extra,
-      },
+      witness: witnessMessage(witnessFields, witness as Record<string, string>),
     },
     signature,
   });
@@ -46,7 +59,8 @@ export async function verifyPermit2Signature(
 
 /**
  * Shared Permit2 authorization verification.
- * Both upto and exact schemes perform identical checks — only the proxy address differs.
+ * Both upto and exact schemes perform identical checks — only the proxy
+ * address and witness shape differ.
  * Checks: spender, recipient, deadline, validAfter, amount, signature, allowance, balance.
  */
 export async function verifyPermit2Authorization(
@@ -54,6 +68,7 @@ export async function verifyPermit2Authorization(
   payload: { permit2Authorization: Permit2Authorization; signature: `0x${string}` },
   requirements: PaymentRequirements,
   proxyAddress: `0x${string}`,
+  witnessFields: readonly WitnessField[],
 ): Promise<VerifyResponse> {
   const { permit2Authorization, signature } = payload;
   const { from, permitted, spender, deadline, witness } = permit2Authorization;
@@ -99,7 +114,14 @@ export async function verifyPermit2Authorization(
   // 6. Verify EIP-712 signature
   const chainId = parseChainId(requirements.network);
   try {
-    const isValidSig = await verifyPermit2Signature(signer, permit2Authorization, signature, chainId, proxyAddress);
+    const isValidSig = await verifyPermit2Signature(
+      signer,
+      permit2Authorization,
+      signature,
+      chainId,
+      proxyAddress,
+      witnessFields,
+    );
     if (!isValidSig) {
       return { isValid: false, invalidReason: "invalid_signature" };
     }
@@ -142,13 +164,18 @@ export async function verifyPermit2Authorization(
 
 /**
  * Shared Permit2 payload creation.
- * Both upto and exact schemes construct identical payloads — only the proxy address differs.
+ * Both upto and exact schemes construct the same scaffold — only the proxy
+ * address and witness shape differ. The scheme injects its witness fields and
+ * any scheme-specific witness values (e.g. upto's `facilitator`); `to` and
+ * `validAfter` are filled in here.
  */
-export async function createPermit2Payload(
+export async function createPermit2Payload<W extends Permit2Witness>(
   signer: ClientSigner,
   requirements: PaymentRequirements,
   proxyAddress: `0x${string}`,
-): Promise<{ signature: `0x${string}`; permit2Authorization: Permit2Authorization }> {
+  witnessFields: readonly WitnessField[],
+  schemeWitness: Omit<W, "to" | "validAfter">,
+): Promise<{ signature: `0x${string}`; permit2Authorization: Permit2Authorization<W> }> {
   const chainId = parseChainId(requirements.network);
   const now = Math.floor(Date.now() / 1000);
   const deadline = now + requirements.maxTimeoutSeconds;
@@ -158,6 +185,12 @@ export async function createPermit2Payload(
   const nonceBytes = crypto.getRandomValues(new Uint8Array(32));
   const nonce = BigInt("0x" + Array.from(nonceBytes).map(b => b.toString(16).padStart(2, "0")).join(""));
 
+  const witness = {
+    ...schemeWitness,
+    to: requirements.payTo as `0x${string}`,
+    validAfter: validAfter.toString(),
+  } as W;
+
   const message = {
     permitted: {
       token: requirements.asset as `0x${string}`,
@@ -166,16 +199,12 @@ export async function createPermit2Payload(
     spender: proxyAddress,
     nonce,
     deadline: BigInt(deadline),
-    witness: {
-      to: requirements.payTo as `0x${string}`,
-      validAfter: BigInt(validAfter),
-      extra: "0x" as `0x${string}`,
-    },
+    witness: witnessMessage(witnessFields, witness as Record<string, string>),
   };
 
   const signature = await signer.signTypedData({
     domain: permit2Domain(chainId),
-    types: permit2WitnessTypes,
+    types: permit2WitnessTypes(witnessFields),
     primaryType: "PermitWitnessTransferFrom",
     message,
   });
@@ -191,11 +220,7 @@ export async function createPermit2Payload(
       spender: proxyAddress,
       nonce: nonce.toString(),
       deadline: deadline.toString(),
-      witness: {
-        to: requirements.payTo as `0x${string}`,
-        validAfter: validAfter.toString(),
-        extra: "0x",
-      },
+      witness,
     },
   };
 }

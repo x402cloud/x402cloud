@@ -1,6 +1,6 @@
 import type { PaymentRequirements, VerifyResponse } from "@x402cloud/protocol";
 import type { VerifySigner, ExactPayload } from "../types.js";
-import { X402_EXACT_PROXY } from "../constants.js";
+import { X402_EXACT_PROXY, EXACT_WITNESS_FIELDS } from "../constants.js";
 import { verifyPermit2Authorization } from "../shared.js";
 
 /**
@@ -12,5 +12,5 @@ export async function verifyExact(
   payload: ExactPayload,
   requirements: PaymentRequirements,
 ): Promise<VerifyResponse> {
-  return verifyPermit2Authorization(signer, payload, requirements, X402_EXACT_PROXY);
+  return verifyPermit2Authorization(signer, payload, requirements, X402_EXACT_PROXY, EXACT_WITNESS_FIELDS);
 }

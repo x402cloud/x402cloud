@@ -9,6 +9,25 @@ they are versioned together until a package needs to diverge.
 
 ## [Unreleased]
 
+### Changed — BREAKING (pre-publish, no released versions affected)
+- **Canonical Coinbase proxy migration (mainnet unblock).** All schemes now
+  target the canonical CREATE2-deployed proxies — Upto
+  `0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002`, Exact
+  `0x402085c248EeA27D92E8b30b2C58ed07f9E20001` — which exist at the same
+  address on Base mainnet AND Base Sepolia (source vendored under
+  `contracts/`). The witness encoding follows the canonical contracts:
+  upto signs `Witness(address to,address facilitator,uint256 validAfter)`
+  (the contract enforces `msg.sender == witness.facilitator`), exact signs
+  `Witness(address to,uint256 validAfter)`; the legacy `extra` witness
+  field is gone. Servers advertise their settlement address in
+  `PaymentRequirements.extra.facilitator` (the middleware does this in its
+  402 response); `createUptoPayload` throws if it is missing. Payloads
+  signed against the legacy Sepolia proxies are not compatible.
+  `PROXY_ADDRESSES` now maps both Base networks to the canonical
+  addresses, and `scripts/verify-mainnet-proxies.ts` passes fail-closed on
+  mainnet. E2E proves a real on-chain upto settlement through the
+  canonical proxy on an Anvil fork (payee USDC balance asserted).
+
 ### Security
 - **facilitator-api / facilitator-docker:** auth middleware is now bound to
   payment routes via `createFacilitatorRoutes({ auth })` so it cannot be

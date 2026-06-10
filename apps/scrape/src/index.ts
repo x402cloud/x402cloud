@@ -21,6 +21,8 @@ type Bindings = {
   BROWSER: Fetcher;
   NETWORK: string;
   FACILITATOR_URL: string;
+  /** Settlement wallet address of the facilitator (its /supported `facilitator` field). Advertised to clients as `extra.facilitator` — the canonical upto witness binds it. */
+  FACILITATOR_ADDRESS: `0x${string}`;
   OPERATOR_ADDRESS: string;
 };
 
@@ -186,6 +188,7 @@ function buildDeps(env: Bindings): Deps {
   const middleware = remoteUptoPaymentMiddleware(
     buildRoutes(env.NETWORK as `${string}:${string}`, env.OPERATOR_ADDRESS),
     env.FACILITATOR_URL,
+    env.FACILITATOR_ADDRESS,
   );
   return Object.freeze({ middleware, renderDeps: createDefaultRenderDeps() });
 }
@@ -303,7 +306,7 @@ export function createApp(env: Bindings): Hono<Env> {
 let cache: { readonly app: Hono<Env>; readonly key: string } | null = null;
 
 function depsKey(env: Bindings): string {
-  return `${env.NETWORK}|${env.FACILITATOR_URL}|${env.OPERATOR_ADDRESS}`;
+  return `${env.NETWORK}|${env.FACILITATOR_URL}|${env.FACILITATOR_ADDRESS}|${env.OPERATOR_ADDRESS}`;
 }
 
 function getApp(env: Bindings): Hono<Env> {

@@ -4,7 +4,7 @@ import { renderDashboard } from "./html.js";
 
 type Env = {
   TESTNET_RPC_URL?: string;
-  PRODUCTION_RPC_URL?: string;
+  MAINNET_RPC_URL?: string;
 };
 
 function resolveTarget(name: string, env: Env): Target | undefined {
@@ -15,8 +15,8 @@ function resolveTarget(name: string, env: Env): Target | undefined {
   if (name === "testnet" && env.TESTNET_RPC_URL) {
     return { ...base, rpc: env.TESTNET_RPC_URL };
   }
-  if (name === "production" && env.PRODUCTION_RPC_URL) {
-    return { ...base, rpc: env.PRODUCTION_RPC_URL };
+  if (name === "mainnet" && env.MAINNET_RPC_URL) {
+    return { ...base, rpc: env.MAINNET_RPC_URL };
   }
   return base;
 }

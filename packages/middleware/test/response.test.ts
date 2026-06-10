@@ -6,6 +6,7 @@ import type { Network } from "@x402cloud/protocol";
 const resourceUrl = "https://api.example.com/inference";
 const payTo = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88";
 const baseUsdc = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const facilitator = "0x9999999999999999999999999999999999999999" as const;
 
 describe("buildPaymentRequired (upto)", () => {
   it("builds a PaymentRequired with default USDC for Base", () => {
@@ -16,7 +17,7 @@ describe("buildPaymentRequired (upto)", () => {
       meter: () => "100000",
     };
 
-    const result = buildPaymentRequired(cfg, resourceUrl);
+    const result = buildPaymentRequired(cfg, resourceUrl, facilitator);
 
     expect(result.x402Version).toBe(2);
     expect(result.resource.url).toBe(resourceUrl);
@@ -30,6 +31,8 @@ describe("buildPaymentRequired (upto)", () => {
     expect(req.maxAmount).toBe("100000");
     expect(req.payTo).toBe(payTo);
     expect(req.maxTimeoutSeconds).toBe(300);
+    // The canonical upto witness binds the settler, so the 402 advertises it.
+    expect(req.extra).toEqual({ facilitator });
   });
 
   it("honors explicit asset override", () => {
@@ -42,7 +45,7 @@ describe("buildPaymentRequired (upto)", () => {
       meter: () => "10000",
     };
 
-    const result = buildPaymentRequired(cfg, resourceUrl);
+    const result = buildPaymentRequired(cfg, resourceUrl, facilitator);
     expect(result.accepts[0].asset).toBe(custom);
   });
 
@@ -56,7 +59,7 @@ describe("buildPaymentRequired (upto)", () => {
       meter: () => "1000000",
     };
 
-    const result = buildPaymentRequired(cfg, resourceUrl);
+    const result = buildPaymentRequired(cfg, resourceUrl, facilitator);
     expect(result.accepts[0].maxTimeoutSeconds).toBe(600);
     expect(result.resource.description).toBe("Premium inference");
   });
@@ -69,7 +72,7 @@ describe("buildPaymentRequired (upto)", () => {
       meter: () => "100000",
     };
 
-    expect(() => buildPaymentRequired(cfg, resourceUrl)).toThrow(/No USDC address/);
+    expect(() => buildPaymentRequired(cfg, resourceUrl, facilitator)).toThrow(/No USDC address/);
   });
 
   it("parses maxPrice into smallest USDC units", () => {
@@ -80,7 +83,7 @@ describe("buildPaymentRequired (upto)", () => {
       meter: () => "13000",
     };
 
-    const result = buildPaymentRequired(cfg, resourceUrl);
+    const result = buildPaymentRequired(cfg, resourceUrl, facilitator);
     expect(result.accepts[0].maxAmount).toBe("13000");
   });
 });

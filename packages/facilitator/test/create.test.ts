@@ -142,6 +142,9 @@ describe("createFacilitator", () => {
       expect.anything(),
       mockPayload,
       mockRequirements,
+      // The facilitator's OWN settlement address — verifyUpto fails closed on
+      // any witness/requirements bound to a different facilitator.
+      expect.stringMatching(new RegExp(EXPECTED_ADDRESS, 'i')),
     );
   });
 

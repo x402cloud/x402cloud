@@ -1,12 +1,6 @@
 # @x402cloud/probes
 
-Health and readiness probes for x402cloud services.
-
-A small library of pure async functions (`(target) => Promise<ProbeResult>`) that
-check whether a network's RPC, USDC and Permit2 contracts, facilitator API, and
-inference API are alive and behaving correctly. Used by `apps/status` and the
-operational dashboards, but exported as a library so anyone can run the same
-checks against their own deployment.
+Health and readiness probes for x402cloud infrastructure. A small library of pure async functions (`(target) => Promise<ProbeResult>`) that check whether a network's RPC, USDC and Permit2 contracts, facilitator API, and inference API are alive and behaving correctly. Used by the x402cloud status dashboards, and exported as a library (publishable, `publishConfig.access: "public"`) so anyone can run the same checks against their own deployment.
 
 ## Install
 
@@ -16,29 +10,33 @@ pnpm add @x402cloud/probes
 
 ## Usage
 
-```typescript
+```ts
 import {
   allProbes,
   runProbes,
   rpcAlive,
-  facilitatorHealth,
+  TARGETS,
   type Target,
 } from "@x402cloud/probes";
 
-const target: Target = {
-  name: "base-sepolia",
+// Use a built-in target (local | testnet | mainnet)...
+const target = TARGETS.testnet;
+
+// ...or define your own
+const custom: Target = {
+  name: "my-deployment",
   rpc: "https://sepolia.base.org",
-  facilitator: "https://x402cloud.ai",
+  facilitator: "https://facilitator.x402cloud.ai",
   infer: "https://infer.x402cloud.ai",
   network: "eip155:84532",
 };
 
 // Run a single probe
 const result = await rpcAlive(target);
-console.log(result); // { name: "rpc.alive", status: "pass", latencyMs: 42 }
+// { name: "rpc-alive", status: "pass", latencyMs: 42 }
 
 // Run the full suite
-const report = await runProbes(target, allProbes);
+const report = await runProbes(allProbes, target);
 console.log(report.summary); // { pass, fail, warn, skip }
 ```
 
@@ -55,16 +53,20 @@ console.log(report.summary); // { pass, fail, warn, skip }
 | `paymentFlow` | End-to-end signing + verify works against the facilitator |
 | `gasEstimate` | Facilitator wallet has enough native token to pay gas |
 
-`allProbes` is the default list. You can compose your own array.
+`allProbes` is the default list. You can compose your own array — probes targeting a service the target doesn't define (e.g. `infer: null`) return `status: "skip"`.
 
 ## Design
 
-Each probe is a pure function that takes a `Target` and returns a `ProbeResult`.
-Probes never throw — failures are returned as `{ status: "fail", error }`. The
-`wrapProbe` helper handles timing and exception → result conversion so the body
-of each probe can be straightforward. This keeps probes composable and testable
-without any framework.
+Each probe is a pure function that takes a `Target` and returns a `ProbeResult`. Probes never throw — failures are returned as `{ status: "fail", error }`. The `wrapProbe(name, body, timeoutMs?)` helper handles timing, a 10s default timeout via `AbortSignal`, and exception-to-result conversion, so the body of each probe stays straightforward. This keeps probes composable and testable without any framework.
+
+## Exports
+
+**Functions:** `runProbes`, `wrapProbe`, `rpcAlive`, `usdcContract`, `permit2Contract`, `facilitatorHealth`, `inferHealth`, `inferModels`, `paymentFlow`, `gasEstimate`
+
+**Constants:** `allProbes`, `TARGETS`
+
+**Types:** `Probe`, `ProbeResult`, `ProbeReport`, `ProbeStatus`, `Target`
 
 ## License
 
-MIT — see [LICENSE](../../LICENSE).
+MIT — part of [x402cloud](https://github.com/x402cloud/x402cloud)

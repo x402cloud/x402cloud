@@ -192,6 +192,13 @@ export type PaymentStrategy<TRouteConfig extends BaseRouteConfig, TPayload> = {
   /** Build the 402 PaymentRequired response body */
   buildPaymentRequired: (routeConfig: TRouteConfig, resourceUrl: string) => PaymentRequired;
 
+  /**
+   * Scheme-specific `PaymentRequirements.extra` (e.g. upto's `facilitator`).
+   * Server-built data — included in the requirements the payload is verified
+   * against, mirroring what `buildPaymentRequired` advertised in the 402.
+   */
+  requirementsExtra?: Record<string, unknown>;
+
   /** Verify the payment authorization */
   verify: (payload: TPayload, requirements: PaymentRequirements) => Promise<VerifyResponse>;
 
@@ -254,6 +261,7 @@ export async function processPayment<TRouteConfig extends BaseRouteConfig, TPayl
     maxAmount: strategy.getPrice(routeConfig),
     payTo: routeConfig.payTo,
     maxTimeoutSeconds: routeConfig.maxTimeoutSeconds ?? 300,
+    ...(strategy.requirementsExtra ? { extra: strategy.requirementsExtra } : {}),
   };
 
   // Verify payment authorization

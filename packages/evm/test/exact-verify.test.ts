@@ -42,7 +42,6 @@ function makePayload(overrides?: {
       witness: {
         to: overrides?.to ?? PAY_TO,
         validAfter: overrides?.validAfter ?? (now - 60).toString(),
-        extra: "0x",
       },
     },
   };

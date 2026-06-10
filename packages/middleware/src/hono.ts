@@ -8,16 +8,22 @@ import type { MiddlewareOptions } from "./generic-core.js";
 /**
  * Hono middleware for x402 upto payments with a local FacilitatorSigner.
  * Use when the server holds a private key (e.g., standalone facilitator).
+ *
+ * `facilitator` is the signer's settlement wallet address. It is advertised
+ * to clients in the 402 response (`extra.facilitator`) and enforced during
+ * verification — the canonical upto proxy only lets that address settle.
  */
 export function uptoPaymentMiddleware(
   routes: UptoRoutesConfig,
   signer: FacilitatorSigner,
+  facilitator: `0x${string}`,
   options?: MiddlewareOptions,
 ): MiddlewareHandler {
   return buildUptoMiddleware(
     routes,
-    (payload, requirements) => verifyUpto(signer, payload, requirements),
+    (payload, requirements) => verifyUpto(signer, payload, requirements, facilitator),
     (payload, requirements, settlementAmount) => settleUpto(signer, payload, requirements, settlementAmount),
+    facilitator,
     options,
   );
 }

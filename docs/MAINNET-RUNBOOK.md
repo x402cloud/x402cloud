@@ -34,50 +34,42 @@ The two keys are not interchangeable. `DEPLOYER_KEY` only needs to exist
 long enough to deploy and verify contracts. `FACILITATOR_KEY` is the
 production hot wallet — alert on it.
 
-## 3. Contract deploy on Base mainnet
+## 3. Contracts on Base mainnet — RESOLVED 2026-06-10
 
-### 3a. Blocker: Upto proxy contract source
+### 3a. Resolution: canonical Coinbase CREATE2 proxies
 
-`packages/evm/src/constants.ts` references two pre-deployed proxies on
-Base Sepolia:
+The original blocker (legacy proxies `0x402063…0002`/`0x402061…0001`
+existed only on Sepolia, with no source in this repo) was resolved by
+migrating the whole stack to the **canonical Coinbase proxies**, which are
+CREATE2-deployed at the same address on Base mainnet AND Base Sepolia:
 
-- `X402_UPTO_PROXY = 0x4020633461b2895a48930Ff97eE8fCdE8E520002`
-- `X402_EXACT_PROXY = 0x4020615294c913F045dc10f0a5cdEbd86c280001`
+- `X402_UPTO_PROXY = 0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002`
+- `X402_EXACT_PROXY = 0x402085c248EeA27D92E8b30b2C58ed07f9E20001`
 
-These were deployed by Coinbase as part of the x402 reference impl. The
-Solidity source is **not checked into this repo** — `find . -name "*.sol"`
-returns nothing under any non-`node_modules` path. The ABIs in
-`packages/evm/src/constants.ts` (`uptoProxyAbi`, `exactProxyAbi`) cover
-only the `settle` function we call.
+Source: `coinbase/x402` `contracts/evm/src`, vendored for reference under
+`contracts/`. The canonical witness encoding differs from the legacy one —
+upto binds the settling facilitator
+(`Witness(address to,address facilitator,uint256 validAfter)`, enforced as
+`msg.sender == witness.facilitator`), exact is
+`Witness(address to,uint256 validAfter)`. Servers advertise the settlement
+address via `PaymentRequirements.extra.facilitator` in the 402 response.
 
-Before mainnet launch, one of these must happen:
+**No contract deploy is needed for mainnet launch.** `DEPLOYER_KEY` in §2
+is no longer required (Coinbase's CREATE2 deployment also means anyone can
+deploy the same contracts to the same addresses on any new EVM chain —
+see the upstream repo's `contracts/evm/README.md`).
 
-1. **Preferred — reuse Coinbase mainnet deployment.** Check whether the
-   same proxies exist at the same addresses on Base mainnet (counter-
-   factual / CREATE2 deploys are common for protocol primitives). Verify
-   on [basescan.org](https://basescan.org) for both addresses. If they
-   exist with matching bytecode, no deploy needed — only update
-   `apps/*/wrangler.toml` `NETWORK` and the indexer constants.
+Before flipping any service to mainnet, run the fail-closed gate:
 
-2. **Fallback — redeploy from upstream.** Pull the source from the
-   official `coinbase/x402` reference implementation, vendor it under
-   `contracts/` in this repo, deploy with Foundry:
+```bash
+pnpm -F x402cloud-scripts verify:mainnet
+```
 
-   ```bash
-   forge create \
-     --rpc-url "$BASE_MAINNET_RPC_URL" \
-     --private-key "$DEPLOYER_KEY" \
-     --verify --etherscan-api-key "$BASESCAN_API_KEY" \
-     contracts/src/UptoProxy.sol:UptoProxy
-   ```
-
-   Repeat for `ExactProxy.sol`. Record the resulting addresses and update
-   `packages/evm/src/constants.ts` (add a chain-keyed map rather than the
-   current constant — it must accrete, not break Sepolia).
-
-**Do not proceed past this section until option 1 is confirmed or option
-2 is executed and verified on Basescan.** No fabricated addresses are
-allowed in production code.
+It must print `OVERALL: PASS` (it checks bytecode presence AND a settle
+selector match for both proxies on mainnet, plus Permit2/USDC anchors).
+Verified PASS on 2026-06-10. Also verified by e2e: real on-chain upto
+settlement through the canonical proxy on an Anvil fork of Base Sepolia
+(`pnpm -F e2e-tests test` asserts the payee's USDC balance delta).
 
 ## 4. Worker secrets to set per environment
 
