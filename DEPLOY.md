@@ -61,7 +61,7 @@ rate limits.
 
 ```bash
 pnpm -F status exec wrangler secret put TESTNET_RPC_URL    # optional
-pnpm -F status exec wrangler secret put PRODUCTION_RPC_URL # optional
+pnpm -F status exec wrangler secret put MAINNET_RPC_URL # optional
 pnpm -F status exec wrangler deploy
 ```
 
@@ -155,7 +155,7 @@ goldsky pipeline apply apps/x402-indexer/pipeline.yaml
 | `facilitator-api` | `FACILITATOR_API_TOKEN` | Bearer auth for `/verify`, `/settle` |
 | `facilitator-docker` | `FACILITATOR_PRIVATE_KEY`, `RPC_URL`, optional `FACILITATOR_API_TOKEN` | Same |
 | `indexer` | `BASE_RPC_URL`, `BASE_SEPOLIA_RPC_URL` | Optional private RPCs |
-| `status` | `TESTNET_RPC_URL`, `PRODUCTION_RPC_URL` | Optional private RPCs |
+| `status` | `TESTNET_RPC_URL`, `MAINNET_RPC_URL` | Optional private RPCs |
 | `acp-seller` | `CF_ACCOUNT_ID`, `CF_API_TOKEN` | CF Workers AI |
 
 `.env` files are gitignored. Never commit private keys; use

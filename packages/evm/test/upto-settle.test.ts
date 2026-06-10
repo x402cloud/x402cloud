@@ -8,6 +8,7 @@ const PAY_TO = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88" as const;
 const PAYER = "0x1111111111111111111111111111111111111111" as const;
 const TOKEN = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 const TX_HASH = "0xabc123def456" as `0x${string}`;
+const FACILITATOR = "0x9999999999999999999999999999999999999999" as const;
 
 function makeRequirements(): PaymentRequirements {
   return {
@@ -17,6 +18,7 @@ function makeRequirements(): PaymentRequirements {
     maxAmount: "100000",
     payTo: PAY_TO,
     maxTimeoutSeconds: 300,
+    extra: { facilitator: FACILITATOR },
   };
 }
 
@@ -35,8 +37,8 @@ function makePayload(): UptoPayload {
       deadline: (now + 600).toString(),
       witness: {
         to: PAY_TO,
+        facilitator: FACILITATOR,
         validAfter: (now - 60).toString(),
-        extra: "0x",
       },
     },
   };

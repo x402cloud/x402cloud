@@ -6,6 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 NETWORK = "eip155:84532"
 FACILITATOR_URL = "https://facilitator.x402cloud.ai"
+# Settlement wallet of the facilitator above (see its /supported endpoint).
+FACILITATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
 OPERATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
 
 [route]

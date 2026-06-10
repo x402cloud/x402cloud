@@ -50,22 +50,24 @@ export const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3" as c
 export const SETTLEMENT_RECEIPT_TIMEOUT_MS = 60_000;
 
 /**
- * Coinbase-deployed x402 proxy for exact (fixed) payments.
+ * Canonical Coinbase x402ExactPermit2Proxy (exact / fixed payments).
  *
- * Confirmed live on Base Sepolia (eip155:84532). NOT deployed at this address
- * on Base mainnet (eip155:8453) — `eth_getCode` returns `0x`. See
- * `proxyAddresses()` for the chain-keyed resolution that mainnet needs.
+ * Deployed via deterministic CREATE2, so the address is identical on Base
+ * mainnet (eip155:8453) AND Base Sepolia (eip155:84532) — code verified on
+ * both. Source: github.com/coinbase/x402 contracts/evm/src (vendored under
+ * `contracts/` for reference).
  */
-export const X402_EXACT_PROXY = "0x4020615294c913F045dc10f0a5cdEbd86c280001" as const;
+export const X402_EXACT_PROXY = "0x402085c248EeA27D92E8b30b2C58ed07f9E20001" as const;
 
 /**
- * Coinbase-deployed x402 proxy for upto (metered) payments.
+ * Canonical Coinbase x402UptoPermit2Proxy (upto / metered payments).
  *
- * Confirmed live on Base Sepolia (eip155:84532). NOT deployed at this address
- * on Base mainnet (eip155:8453) — `eth_getCode` returns `0x`. See
- * `proxyAddresses()` for the chain-keyed resolution that mainnet needs.
+ * Deployed via deterministic CREATE2, so the address is identical on Base
+ * mainnet (eip155:8453) AND Base Sepolia (eip155:84532) — code verified on
+ * both. Source: github.com/coinbase/x402 contracts/evm/src (vendored under
+ * `contracts/` for reference).
  */
-export const X402_UPTO_PROXY = "0x4020633461b2895a48930Ff97eE8fCdE8E520002" as const;
+export const X402_UPTO_PROXY = "0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002" as const;
 
 /** The two proxy addresses used by a given chain. */
 export type ProxyAddresses = {
@@ -76,30 +78,26 @@ export type ProxyAddresses = {
 };
 
 /**
- * Per-chain proxy address overrides, keyed by CAIP-2 network id.
+ * Per-chain proxy addresses, keyed by CAIP-2 network id.
  *
- * Only populate a chain here when its proxies live at addresses that differ
- * from the legacy `X402_*_PROXY` constants. Chains absent from this map fall
- * back to those constants via {@link proxyAddresses} — so Base Sepolia and
- * every existing caller keep their current addresses untouched.
- *
- * Mainnet (`eip155:8453`) is intentionally NOT listed yet: the repo's legacy
- * addresses have no bytecode there, and Coinbase's canonical CREATE2 proxies
- * (exact `0x402085c248EeA27D92E8b30b2C58ed07f9E20001`,
- * upto  `0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002`) carry *different* bytecode
- * than the Sepolia proxies this package's `settle` ABI was written against.
- * Verify the settle signature on-chain before adding the mainnet entry — see
- * docs/MAINNET-RUNBOOK.md §3a.
+ * The canonical Coinbase proxies are CREATE2-deployed at the SAME address on
+ * every supported chain, so both Base networks map to the `X402_*_PROXY`
+ * constants. New chains accrete by adding an entry (or, if Coinbase deploys
+ * at the same CREATE2 address there too, by relying on the fallback in
+ * {@link proxyAddresses}).
  */
-export const PROXY_ADDRESSES: Readonly<Record<string, ProxyAddresses>> = Object.freeze({});
+export const PROXY_ADDRESSES: Readonly<Record<string, ProxyAddresses>> = Object.freeze({
+  "eip155:8453":  { exact: X402_EXACT_PROXY, upto: X402_UPTO_PROXY },
+  "eip155:84532": { exact: X402_EXACT_PROXY, upto: X402_UPTO_PROXY },
+});
 
 /**
  * Resolve the exact/upto proxy addresses for a CAIP-2 network.
  *
- * Falls back to the legacy `X402_*_PROXY` constants for any chain not present
- * in {@link PROXY_ADDRESSES}, so existing single-chain (Sepolia) callers are
- * unaffected. New chains accrete by adding a `PROXY_ADDRESSES` entry — no
- * change to this function or its callers required.
+ * Falls back to the canonical `X402_*_PROXY` constants for any chain not
+ * present in {@link PROXY_ADDRESSES} (correct wherever Coinbase's CREATE2
+ * deployment exists). Verify bytecode before settling on a new chain — see
+ * scripts/verify-mainnet-proxies.ts.
  */
 export function proxyAddresses(network: string): ProxyAddresses {
   return (
@@ -131,25 +129,51 @@ export function permit2Domain(chainId: number) {
   } as const;
 }
 
-/** EIP-712 types for Permit2 with Witness */
-export const permit2WitnessTypes = {
-  TokenPermissions: [
-    { name: "token", type: "address" },
-    { name: "amount", type: "uint256" },
-  ],
-  PermitWitnessTransferFrom: [
-    { name: "permitted", type: "TokenPermissions" },
-    { name: "spender", type: "address" },
-    { name: "nonce", type: "uint256" },
-    { name: "deadline", type: "uint256" },
-    { name: "witness", type: "Witness" },
-  ],
-  Witness: [
-    { name: "to", type: "address" },
-    { name: "validAfter", type: "uint256" },
-    { name: "extra", type: "bytes" },
-  ],
-} as const;
+/** One field of a proxy's EIP-712 Witness struct (data, not mechanism). */
+export type WitnessField = { name: string; type: "address" | "uint256" };
+
+/**
+ * Witness fields of the canonical x402UptoPermit2Proxy.
+ * Solidity: `Witness(address to,address facilitator,uint256 validAfter)`.
+ * `facilitator` binds settlement to one caller — the contract requires
+ * `msg.sender == witness.facilitator`.
+ */
+export const UPTO_WITNESS_FIELDS: readonly WitnessField[] = Object.freeze([
+  { name: "to", type: "address" },
+  { name: "facilitator", type: "address" },
+  { name: "validAfter", type: "uint256" },
+]);
+
+/**
+ * Witness fields of the canonical x402ExactPermit2Proxy.
+ * Solidity: `Witness(address to,uint256 validAfter)`.
+ */
+export const EXACT_WITNESS_FIELDS: readonly WitnessField[] = Object.freeze([
+  { name: "to", type: "address" },
+  { name: "validAfter", type: "uint256" },
+]);
+
+/**
+ * EIP-712 types for Permit2 `PermitWitnessTransferFrom` with the given
+ * Witness struct. The scaffold is shared; the witness fields are injected
+ * per scheme ({@link UPTO_WITNESS_FIELDS} / {@link EXACT_WITNESS_FIELDS}).
+ */
+export function permit2WitnessTypes(witnessFields: readonly WitnessField[]) {
+  return {
+    TokenPermissions: [
+      { name: "token", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    PermitWitnessTransferFrom: [
+      { name: "permitted", type: "TokenPermissions" },
+      { name: "spender", type: "address" },
+      { name: "nonce", type: "uint256" },
+      { name: "deadline", type: "uint256" },
+      { name: "witness", type: "Witness" },
+    ],
+    Witness: witnessFields as { name: string; type: string }[],
+  } as const;
+}
 
 /** ERC-20 ABI subset for balance/allowance checks */
 export const erc20Abi = [
@@ -172,29 +196,32 @@ export const erc20Abi = [
   },
 ] as const;
 
-/** x402 Upto Permit2 Proxy ABI — settle function */
+/** Permit2 `PermitTransferFrom` tuple — shared by both proxy ABIs. */
+const permitTransferFromComponents = [
+  {
+    name: "permitted",
+    type: "tuple",
+    components: [
+      { name: "token", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+  },
+  { name: "nonce", type: "uint256" },
+  { name: "deadline", type: "uint256" },
+] as const;
+
+/**
+ * Canonical x402UptoPermit2Proxy ABI — settle function.
+ * `settle(PermitTransferFrom permit, uint256 amount, address owner, Witness witness, bytes signature)`
+ * with `Witness(address to, address facilitator, uint256 validAfter)`.
+ */
 export const uptoProxyAbi = [
   {
     name: "settle",
     type: "function",
     stateMutability: "nonpayable",
     inputs: [
-      {
-        name: "permit",
-        type: "tuple",
-        components: [
-          {
-            name: "permitted",
-            type: "tuple",
-            components: [
-              { name: "token", type: "address" },
-              { name: "amount", type: "uint256" },
-            ],
-          },
-          { name: "nonce", type: "uint256" },
-          { name: "deadline", type: "uint256" },
-        ],
-      },
+      { name: "permit", type: "tuple", components: permitTransferFromComponents },
       { name: "amount", type: "uint256" },
       { name: "owner", type: "address" },
       {
@@ -202,8 +229,8 @@ export const uptoProxyAbi = [
         type: "tuple",
         components: [
           { name: "to", type: "address" },
+          { name: "facilitator", type: "address" },
           { name: "validAfter", type: "uint256" },
-          { name: "extra", type: "bytes" },
         ],
       },
       { name: "signature", type: "bytes" },
@@ -212,29 +239,19 @@ export const uptoProxyAbi = [
   },
 ] as const;
 
-/** x402 Exact Permit2 Proxy ABI — settle function */
+/**
+ * Canonical x402ExactPermit2Proxy ABI — settle function.
+ * `settle(PermitTransferFrom permit, address owner, Witness witness, bytes signature)`
+ * with `Witness(address to, uint256 validAfter)`. Always transfers the exact
+ * permitted amount.
+ */
 export const exactProxyAbi = [
   {
     name: "settle",
     type: "function",
     stateMutability: "nonpayable",
     inputs: [
-      {
-        name: "permit",
-        type: "tuple",
-        components: [
-          {
-            name: "permitted",
-            type: "tuple",
-            components: [
-              { name: "token", type: "address" },
-              { name: "amount", type: "uint256" },
-            ],
-          },
-          { name: "nonce", type: "uint256" },
-          { name: "deadline", type: "uint256" },
-        ],
-      },
+      { name: "permit", type: "tuple", components: permitTransferFromComponents },
       { name: "owner", type: "address" },
       {
         name: "witness",
@@ -242,7 +259,6 @@ export const exactProxyAbi = [
         components: [
           { name: "to", type: "address" },
           { name: "validAfter", type: "uint256" },
-          { name: "extra", type: "bytes" },
         ],
       },
       { name: "signature", type: "bytes" },

@@ -31,13 +31,20 @@ export type SettleFn = (
   settlementAmount: string,
 ) => Promise<SettleResponse>;
 
-/** Build the upto payment strategy from verify/settle functions */
-function uptoStrategy(verify: VerifyFn, settle: SettleFn): PaymentStrategy<UptoRoutesConfig[string], UptoPayload> {
+/**
+ * Build the upto payment strategy from verify/settle functions.
+ * `facilitator` is the settlement wallet address advertised in the 402
+ * response (`extra.facilitator`) — the canonical upto witness binds it.
+ */
+function uptoStrategy(verify: VerifyFn, settle: SettleFn, facilitator: `0x${string}`): PaymentStrategy<UptoRoutesConfig[string], UptoPayload> {
   return {
     scheme: "upto",
     getPrice: (routeConfig) => parseUsdcAmount(routeConfig.maxPrice),
     castPayload: (decoded) => parseUptoPayload(decoded),
-    buildPaymentRequired,
+    buildPaymentRequired: (routeConfig, resourceUrl) => buildPaymentRequired(routeConfig, resourceUrl, facilitator),
+    // Verify against the same facilitator we advertise — the canonical upto
+    // witness binds it, so requirements.extra must carry it for verification.
+    requirementsExtra: { facilitator },
     verify,
     buildSettle: (payload, requirements, verification, request, routeConfig, options) => {
       return async (response: Response) => {
@@ -92,9 +99,10 @@ export async function processUptoPayment(
   routes: UptoRoutesConfig,
   verify: VerifyFn,
   settle: SettleFn,
+  facilitator: `0x${string}`,
   options?: MiddlewareOptions,
 ): Promise<PaymentFlowResult> {
-  return processPayment(method, pathname, request, routes, uptoStrategy(verify, settle), options);
+  return processPayment(method, pathname, request, routes, uptoStrategy(verify, settle, facilitator), options);
 }
 
 /**
@@ -105,7 +113,8 @@ export function buildUptoMiddleware(
   routes: UptoRoutesConfig,
   verify: VerifyFn,
   settle: SettleFn,
+  facilitator: `0x${string}`,
   options?: MiddlewareOptions,
 ): MiddlewareHandler {
-  return buildMiddleware(routes, uptoStrategy(verify, settle), options);
+  return buildMiddleware(routes, uptoStrategy(verify, settle, facilitator), options);
 }

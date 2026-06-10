@@ -9,18 +9,22 @@ binding = "AI"
 [vars]
 NETWORK = "base-sepolia"
 FACILITATOR_URL = "https://facilitator.x402cloud.ai"
+# Settlement wallet of the facilitator above (see its /supported endpoint).
+FACILITATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
 
 # Durable settlement recording (reconciliation). When this binding is present,
 # the payment middleware persists a `pending` record before each on-chain
 # settle and overwrites it with `settled`/`failed` after — failures are also
 # dead-lettered for a reconciliation sweep. Absent binding => safe no-op.
 #
-# Create the namespace once, then paste the returned id below:
+# Create the namespace once, then paste the returned id below and uncomment —
+# a placeholder id makes `wrangler deploy` fail, so the block stays commented
+# until the real id exists (absent binding is the documented safe no-op):
 #   CLOUDFLARE_ACCOUNT_ID=331224f43e4f448483cad2f1185ea965 \
 #     npx wrangler kv namespace create SETTLEMENTS
-[[kv_namespaces]]
-binding = "SETTLEMENTS"
-id = "REPLACE_WITH_SETTLEMENTS_KV_NAMESPACE_ID"
+# [[kv_namespaces]]
+# binding = "SETTLEMENTS"
+# id = "<paste id from `wrangler kv namespace create SETTLEMENTS`>"
 
 [route]
 pattern = "infer.x402cloud.ai"

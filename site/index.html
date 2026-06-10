@@ -161,7 +161,7 @@
       margin-bottom: 32px;
     }
 
-    .hero-actions { display: flex; gap: 12px; }
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
     .btn {
       display: inline-flex;
@@ -537,6 +537,7 @@
       <a href="/" class="wordmark">x402cloud.ai</a>
       <div class="nav-links">
         <a href="#services">Services</a>
+        <a href="#pricing">Pricing</a>
         <a href="#packages">Packages</a>
         <a href="https://status.x402cloud.ai">Status</a>
         <a href="https://github.com/x402cloud/x402cloud">GitHub</a>
@@ -550,8 +551,10 @@
       <h1>The open-source<br><span class="dim">x402 implementation</span></h1>
       <p class="lead">Libraries, facilitator, and tools implementing the x402 protocol standard. Add HTTP-native payments to any API. USDC on any chain.</p>
       <div class="hero-actions">
-        <a href="https://github.com/x402cloud/x402cloud" class="btn btn-primary">View on GitHub</a>
-        <a href="#packages" class="btn btn-ghost">Explore packages</a>
+        <a href="https://github.com/x402cloud/x402cloud#quick-start" class="btn btn-primary">Get started</a>
+        <a href="https://facilitator.x402cloud.ai/" class="btn btn-ghost">API docs</a>
+        <a href="https://infer.x402cloud.ai/models" class="btn btn-ghost">Try inference</a>
+        <a href="https://github.com/x402cloud/x402cloud/tree/main/examples" class="btn btn-ghost">Examples</a>
       </div>
     </div>
     <div class="hero-code">
@@ -674,6 +677,31 @@
         <h3>Agent Wallets</h3>
         <p>Wallet creation, spending limits, budget controls. Multi-sig for agent fleets. Ready-to-go wallets for autonomous agents.</p>
         <span class="service-tag">Coming soon</span>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section id="pricing">
+    <div class="section-label">Pricing</div>
+    <div class="section-title">Pay per request. Nothing else.</div>
+    <div class="section-desc">Every request is a USDC micropayment over the x402 protocol. No accounts, no API keys, no subscriptions, no minimums — your wallet is your identity.</div>
+    <div class="stack-grid">
+      <div class="stack-card">
+        <div class="stack-num">01</div>
+        <h3>Micropayments, not plans</h3>
+        <p>You sign a Permit2 authorization for a maximum price, and settlement happens on-chain for the actual metered cost — never more than you authorized. Stop calling, stop paying.</p>
+      </div>
+      <div class="stack-card">
+        <div class="stack-num">02</div>
+        <h3>Inference, priced per call</h3>
+        <p>Each model has its own per-token or per-image price, metered per request. See <a href="https://infer.x402cloud.ai/models" style="color: var(--text-bright); border-bottom: 1px dashed var(--border-dashed);">infer.x402cloud.ai/models</a> for live per-model prices.</p>
+      </div>
+      <div class="stack-card">
+        <div class="stack-num">03</div>
+        <h3>Facilitator: free on testnet</h3>
+        <p>The hosted facilitator's verify and settle endpoints are currently free while the service runs on Base Sepolia testnet. The open-source library is free forever — run your own facilitator anytime.</p>
       </div>
     </div>
   </section>

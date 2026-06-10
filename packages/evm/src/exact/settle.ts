@@ -2,6 +2,7 @@ import type { PaymentRequirements, SettleResponse } from "@x402cloud/protocol";
 import type { FacilitatorSigner, ExactPayload } from "../types.js";
 import {
   X402_EXACT_PROXY,
+  EXACT_WITNESS_FIELDS,
   exactProxyAbi,
 } from "../constants.js";
 import { parseChainId, parseUnixSeconds } from "../utils.js";
@@ -32,7 +33,7 @@ export async function settleExact(
   // Signature-only tamper check (no on-chain reads — contract enforces balance/allowance)
   const chainId = parseChainId(requirements.network);
   try {
-    const isValidSig = await verifyPermit2Signature(signer, permit2Authorization, signature, chainId, X402_EXACT_PROXY);
+    const isValidSig = await verifyPermit2Signature(signer, permit2Authorization, signature, chainId, X402_EXACT_PROXY, EXACT_WITNESS_FIELDS);
     if (!isValidSig) {
       return { success: false, errorReason: "tampered_payload" };
     }
@@ -63,7 +64,6 @@ export async function settleExact(
         {
           to: witness.to,
           validAfter: BigInt(witness.validAfter),
-          extra: witness.extra,
         },
         signature,
       ],

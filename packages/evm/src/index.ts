@@ -12,16 +12,20 @@ export {
   DEFAULT_USDC_ADDRESSES,
   permit2Domain,
   permit2WitnessTypes,
+  UPTO_WITNESS_FIELDS,
+  EXACT_WITNESS_FIELDS,
   erc20Abi,
   uptoProxyAbi,
   exactProxyAbi,
 } from "./constants.js";
 
-export type { ProxyAddresses } from "./constants.js";
+export type { ProxyAddresses, WitnessField } from "./constants.js";
 
 // Types
 export type {
   Permit2Witness,
+  UptoWitness,
+  ExactWitness,
   Permit2Authorization,
   UptoPayload,
   ExactPayload,
@@ -32,6 +36,7 @@ export type {
 
 // Upto scheme
 export { createUptoPayload } from "./upto/client.js";
+export { facilitatorFromRequirements } from "./upto/facilitator.js";
 export { verifyUpto } from "./upto/verify.js";
 export { settleUpto } from "./upto/settle.js";
 

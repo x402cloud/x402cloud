@@ -175,7 +175,7 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
       verify: (payload, requirements) => {
         const guard = assertNetwork(requirements);
         if (!guard.ok) return Promise.resolve({ isValid: false, invalidReason: guard.reason });
-        return verifyUpto(signer, payload as unknown as UptoPayload, requirements);
+        return verifyUpto(signer, payload as unknown as UptoPayload, requirements, account.address);
       },
       settle: (payload, requirements, ...args) => {
         const guard = assertNetwork(requirements);
@@ -207,7 +207,7 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
     async verify(payload, requirements) {
       const guard = assertNetwork(requirements);
       if (!guard.ok) return { isValid: false, invalidReason: guard.reason };
-      return verifyUpto(signer, payload, requirements);
+      return verifyUpto(signer, payload, requirements, account.address);
     },
 
     async settle(payload, requirements, settlementAmount) {

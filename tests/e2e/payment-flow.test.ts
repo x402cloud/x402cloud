@@ -3,7 +3,7 @@
  *
  * No faucets. No external dependencies. Deterministic. Instant.
  *
- * Anvil forks Base Sepolia so Permit2, Upto Proxy, and USDC contracts exist.
+ * Anvil forks Base Sepolia so Permit2, the canonical Coinbase Upto Proxy, and USDC contracts exist.
  * We impersonate a USDC-rich account and fund our test wallets locally.
  *
  * Requires: anvil (from Foundry) installed — `curl -L https://foundry.paradigm.xyz | bash && foundryup`
@@ -44,9 +44,16 @@ const RPC_URL = process.env.RPC_URL ?? "https://sepolia.base.org";
 const ANVIL_PORT = 8546;
 const ANVIL_RPC = `http://127.0.0.1:${ANVIL_PORT}`;
 
-// Anvil pre-funded accounts (10000 ETH each)
-const ANVIL_KEY_0 = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as const;
-const ANVIL_KEY_1 = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d" as const;
+// Test-only keys, funded via anvil_setBalance after the fork starts.
+//
+// Deliberately NOT the well-known Anvil dev keys: those private keys are
+// public, and on the real Base Sepolia network someone has installed an
+// EIP-7702 delegation on account 0 (0xf39Fd…). The fork inherits that code,
+// so Permit2 takes the EIP-1271 contract-signature path for it instead of
+// ECDSA recovery and every settle reverts. Fresh keys have no on-chain
+// history on the forked network.
+const ANVIL_KEY_0 = "0x1111111111111111111111111111111111111111111111111111111111111111" as const;
+const ANVIL_KEY_1 = "0x2222222222222222222222222222222222222222222222222222222222222222" as const;
 
 // Fixed metered cost: $0.001 (1000 USDC units)
 const FIXED_COST = "1000";
@@ -137,6 +144,7 @@ describe("x402 payment flow (Anvil fork of Base Sepolia)", () => {
   let app: Hono;
   let customerAccount: ReturnType<typeof privateKeyToAccount>;
   let facilitatorAccount: ReturnType<typeof privateKeyToAccount>;
+  let usdcBalance: (addr: `0x${string}`) => Promise<bigint>;
 
   beforeAll(async () => {
     // Start Anvil forking Base Sepolia
@@ -145,10 +153,32 @@ describe("x402 payment flow (Anvil fork of Base Sepolia)", () => {
     customerAccount = privateKeyToAccount(ANVIL_KEY_0);
     facilitatorAccount = privateKeyToAccount(ANVIL_KEY_1);
 
+    // Fund both fresh accounts with ETH for gas (they start empty on the fork)
+    for (const addr of [customerAccount.address, facilitatorAccount.address]) {
+      await fetch(ANVIL_RPC, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "anvil_setBalance",
+          params: [addr, "0x21E19E0C9BAB2400000"], // 10000 ETH
+          id: 1,
+        }),
+      });
+    }
+
     const publicClient = createPublicClient({
       chain: baseSepolia,
       transport: http(ANVIL_RPC),
     });
+
+    usdcBalance = async (addr) =>
+      (await publicClient.readContract({
+        address: USDC,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [addr],
+      })) as bigint;
 
     const customerWallet = createWalletClient({
       chain: baseSepolia,
@@ -275,9 +305,11 @@ describe("x402 payment flow (Anvil fork of Base Sepolia)", () => {
       },
     };
 
-    // Compose: real middleware + real facilitator + trivial handler
+    // Compose: real middleware + real facilitator + trivial handler.
+    // The facilitator's address is advertised in the 402 (extra.facilitator)
+    // and bound into the canonical upto witness — only it can settle.
     app = new Hono();
-    app.use("/*", uptoPaymentMiddleware(routes, signer));
+    app.use("/*", uptoPaymentMiddleware(routes, signer, facilitatorAccount.address));
     app.post("/paid", (c) => c.json({ message: "hello" }));
     app.get("/free", (c) => c.json({ message: "free" }));
   });
@@ -308,6 +340,8 @@ describe("x402 payment flow (Anvil fork of Base Sepolia)", () => {
     expect(body.accepts[0].scheme).toBe("upto");
     expect(body.accepts[0].network).toBe(NETWORK);
     expect(body.accepts[0].maxAmount).toBe(parseUsdcAmount("$0.01"));
+    // Canonical upto witness binds the settler — the 402 must advertise it.
+    expect(body.accepts[0].extra).toEqual({ facilitator: facilitatorAccount.address });
 
     const headerVal = res.headers.get("PAYMENT-REQUIRED");
     expect(headerVal).toBeTruthy();
@@ -327,6 +361,7 @@ describe("x402 payment flow (Anvil fork of Base Sepolia)", () => {
   });
 
   it("accepts valid payment, returns 200, and settles on-chain", async () => {
+    const payToBefore = await usdcBalance(PAY_TO);
     const requirements = {
       scheme: "upto" as const,
       network: NETWORK,
@@ -334,6 +369,7 @@ describe("x402 payment flow (Anvil fork of Base Sepolia)", () => {
       maxAmount: parseUsdcAmount("$0.01"),
       payTo: PAY_TO,
       maxTimeoutSeconds: 300,
+      extra: { facilitator: facilitatorAccount.address },
     };
 
     // Sign payment authorization
@@ -364,6 +400,9 @@ describe("x402 payment flow (Anvil fork of Base Sepolia)", () => {
       body: JSON.stringify({ data: "test" }),
     });
 
+    if (res.status !== 200) {
+      console.error("UNEXPECTED STATUS", res.status, await res.text(), res.headers.get("X-Payment-Error"));
+    }
     expect(res.status).toBe(200);
 
     const body = await res.json();
@@ -373,7 +412,14 @@ describe("x402 payment flow (Anvil fork of Base Sepolia)", () => {
     expect(res.headers.get("X-Payment-Settled")).toBe(FIXED_COST);
     expect(res.headers.get("X-Payment-Payer")).toBe(customerAccount.address);
 
-    // Wait for fire-and-forget settlement
-    await new Promise((r) => setTimeout(r, 3000));
+    // The settle is fire-and-forget; poll until the payee's USDC balance
+    // reflects it. This is the assertion that catches a reverting settle —
+    // headers alone are set before the on-chain result is known.
+    let payToAfter = payToBefore;
+    for (let i = 0; i < 20 && payToAfter === payToBefore; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      payToAfter = await usdcBalance(PAY_TO);
+    }
+    expect((payToAfter - payToBefore).toString()).toBe(FIXED_COST);
   });
 });

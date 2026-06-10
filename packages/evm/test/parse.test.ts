@@ -12,8 +12,8 @@ const validPermit2Authorization = {
   },
   witness: {
     to: "0x4444444444444444444444444444444444444444",
+    facilitator: "0x5555555555555555555555555555555555555555",
     validAfter: "0",
-    extra: "0x00",
   },
 };
 
@@ -137,16 +137,16 @@ describe("parseUptoPayload", () => {
     ).toThrow("UptoPayload.permit2Authorization.witness.to");
   });
 
-  it("throws when witness.extra is not hex", () => {
+  it("throws when witness.facilitator is not an address", () => {
     expect(() =>
       parseUptoPayload({
         ...validPayload,
         permit2Authorization: {
           ...validPermit2Authorization,
-          witness: { ...validPermit2Authorization.witness, extra: 42 },
+          witness: { ...validPermit2Authorization.witness, facilitator: 42 },
         },
       })
-    ).toThrow("UptoPayload.permit2Authorization.witness.extra");
+    ).toThrow("UptoPayload.permit2Authorization.witness.facilitator");
   });
 });
 
@@ -374,42 +374,43 @@ describe("parseUptoPayload — hardened input validation", () => {
     ).toThrow("UptoPayload.permit2Authorization.witness.validAfter");
   });
 
-  // --- witness.extra remains variable-length hex ---
+  // --- witness.facilitator (upto only) is a fixed 20-byte address ---
 
-  it("accepts an empty witness.extra (0x)", () => {
+  it("throws when witness.facilitator is missing (upto)", () => {
+    const { facilitator: _f, ...witnessSansFacilitator } = validPermit2Authorization.witness;
     expect(() =>
       parseUptoPayload({
         ...validPayload,
         permit2Authorization: {
           ...validPermit2Authorization,
-          witness: { ...validPermit2Authorization.witness, extra: "0x" },
+          witness: witnessSansFacilitator,
         },
       })
-    ).not.toThrow();
+    ).toThrow("UptoPayload.permit2Authorization.witness.facilitator");
   });
 
-  it("accepts a longer witness.extra hex blob", () => {
+  it("throws when witness.facilitator is too short", () => {
     expect(() =>
       parseUptoPayload({
         ...validPayload,
         permit2Authorization: {
           ...validPermit2Authorization,
-          witness: { ...validPermit2Authorization.witness, extra: "0xdeadbeefcafef00d" },
+          witness: { ...validPermit2Authorization.witness, facilitator: "0x1234" },
         },
       })
-    ).not.toThrow();
+    ).toThrow("UptoPayload.permit2Authorization.witness.facilitator");
   });
 
-  it("throws when witness.extra has non-hex characters", () => {
+  it("throws when witness.facilitator has non-hex characters", () => {
     expect(() =>
       parseUptoPayload({
         ...validPayload,
         permit2Authorization: {
           ...validPermit2Authorization,
-          witness: { ...validPermit2Authorization.witness, extra: "0xnothex" },
+          witness: { ...validPermit2Authorization.witness, facilitator: "0xZZZZ555555555555555555555555555555555555" },
         },
       })
-    ).toThrow("UptoPayload.permit2Authorization.witness.extra");
+    ).toThrow("UptoPayload.permit2Authorization.witness.facilitator");
   });
 });
 

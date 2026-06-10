@@ -1,12 +1,25 @@
-/** Permit2 witness binding payment to specific recipient */
-export type Permit2Witness = {
+/**
+ * Witness of the canonical x402UptoPermit2Proxy: binds recipient AND the one
+ * facilitator allowed to settle (the contract requires
+ * `msg.sender == witness.facilitator`).
+ */
+export type UptoWitness = {
   to: `0x${string}`;
+  facilitator: `0x${string}`;
   validAfter: string;
-  extra: `0x${string}`;
 };
 
-/** Permit2 authorization signed by payer */
-export type Permit2Authorization = {
+/** Witness of the canonical x402ExactPermit2Proxy: binds recipient only. */
+export type ExactWitness = {
+  to: `0x${string}`;
+  validAfter: string;
+};
+
+/** Union of the supported witness shapes. */
+export type Permit2Witness = UptoWitness | ExactWitness;
+
+/** Permit2 authorization signed by payer (witness shape varies by scheme) */
+export type Permit2Authorization<W extends Permit2Witness = Permit2Witness> = {
   from: `0x${string}`;
   permitted: {
     token: `0x${string}`;
@@ -15,19 +28,19 @@ export type Permit2Authorization = {
   spender: `0x${string}`;
   nonce: string;
   deadline: string;
-  witness: Permit2Witness;
+  witness: W;
 };
 
 /** Signed payment payload for upto scheme (immutable — no settlement state) */
 export type UptoPayload = {
   signature: `0x${string}`;
-  permit2Authorization: Permit2Authorization;
+  permit2Authorization: Permit2Authorization<UptoWitness>;
 };
 
 /** Signed payment payload for exact scheme */
 export type ExactPayload = {
   signature: `0x${string}`;
-  permit2Authorization: Permit2Authorization;
+  permit2Authorization: Permit2Authorization<ExactWitness>;
 };
 
 /** Client-side signer interface */

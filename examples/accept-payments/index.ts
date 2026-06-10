@@ -34,8 +34,16 @@ const paidRoutes = {
   },
 };
 
-// Apply x402 payment middleware (delegates to remote facilitator)
-app.use("/*", remoteUptoPaymentMiddleware(paidRoutes, "https://facilitator.x402cloud.ai"));
+// Apply x402 payment middleware (delegates to remote facilitator).
+// The third argument is the facilitator's settlement wallet address — find it
+// at https://facilitator.x402cloud.ai/supported (`facilitator` field). It is
+// advertised to clients in the 402 response because the canonical upto proxy
+// witness binds the one address allowed to settle.
+app.use("/*", remoteUptoPaymentMiddleware(
+  paidRoutes,
+  "https://facilitator.x402cloud.ai",
+  "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88",
+));
 
 // Free endpoint — no payment required (not in paidRoutes)
 app.get("/api/health", (c) => c.json({ status: "ok" }));

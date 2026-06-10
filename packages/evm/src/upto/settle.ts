@@ -2,6 +2,7 @@ import type { PaymentRequirements, SettleResponse } from "@x402cloud/protocol";
 import type { FacilitatorSigner, UptoPayload } from "../types.js";
 import {
   X402_UPTO_PROXY,
+  UPTO_WITNESS_FIELDS,
   uptoProxyAbi,
 } from "../constants.js";
 import { parseChainId, parseUnixSeconds } from "../utils.js";
@@ -54,7 +55,7 @@ export async function settleUpto(
   // Signature-only tamper check (no on-chain reads — contract enforces balance/allowance)
   const chainId = parseChainId(requirements.network);
   try {
-    const isValidSig = await verifyPermit2Signature(signer, permit2Authorization, signature, chainId, X402_UPTO_PROXY);
+    const isValidSig = await verifyPermit2Signature(signer, permit2Authorization, signature, chainId, X402_UPTO_PROXY, UPTO_WITNESS_FIELDS);
     if (!isValidSig) {
       return { success: false, errorReason: "tampered_payload" };
     }
@@ -84,8 +85,8 @@ export async function settleUpto(
         from,
         {
           to: witness.to,
+          facilitator: witness.facilitator,
           validAfter: BigInt(witness.validAfter),
-          extra: witness.extra,
         },
         signature,
       ],

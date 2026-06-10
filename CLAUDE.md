@@ -151,8 +151,9 @@ Tests follow the same Hickey principle: **compose simple parts, don't modify the
 ## Contract Addresses
 
 - Permit2: `0x000000000022D473030F116dDEE9F6B43aC78BA3` (all EVM chains)
-- x402 Upto Proxy: `0x4020633461b2895a48930Ff97eE8fCdE8E520002` (Base Sepolia only — not yet on mainnet)
-- x402 Exact Proxy: `0x4020615294c913F045dc10f0a5cdEbd86c280001`
+- x402 Upto Proxy: `0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002` (canonical Coinbase CREATE2 — same address on Base mainnet AND Base Sepolia)
+- x402 Exact Proxy: `0x402085c248EeA27D92E8b30b2C58ed07f9E20001` (canonical Coinbase CREATE2 — same address on Base mainnet AND Base Sepolia)
+- Source: `coinbase/x402` `contracts/evm/src`, vendored for reference under `contracts/`. The upto witness binds the settling facilitator — `Witness(address to,address facilitator,uint256 validAfter)` — so servers advertise the settlement address in `PaymentRequirements.extra.facilitator` and the contract enforces `msg.sender == witness.facilitator`.
 - USDC (Base): `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
 - USDC (Base Sepolia): `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
 

@@ -39,6 +39,7 @@ vi.mock("@x402cloud/evm", async () => {
 });
 
 const TEST_PAY_TO = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88";
+const FACILITATOR = "0x9999999999999999999999999999999999999999" as const;
 
 function makeRoutes(): UptoRoutesConfig {
   return {
@@ -64,8 +65,8 @@ function makePaymentPayload(): { x402Version: number; payload: UptoPayload } {
         deadline: "9999999999",
         witness: {
           to: TEST_PAY_TO as `0x${string}`,
+          facilitator: "0x9999999999999999999999999999999999999999" as `0x${string}`,
           validAfter: "0",
-          extra: "0x" as `0x${string}`,
         },
       },
     },
@@ -88,7 +89,7 @@ describe("buildUptoMiddleware", () => {
   it("passes through requests not matching any route", async () => {
     const routes = makeRoutes();
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn));
+    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn, FACILITATOR));
     app.get("/health", (c) => c.json({ status: "ok" }));
 
     const res = await app.request("/health");
@@ -99,7 +100,7 @@ describe("buildUptoMiddleware", () => {
   it("returns 402 with PAYMENT-REQUIRED header when no payment header", async () => {
     const routes = makeRoutes();
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn));
+    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn, FACILITATOR));
     app.post("/v1/chat/completions", (c) => c.json({ result: "ok" }));
 
     const res = await app.request("/v1/chat/completions", { method: "POST" });
@@ -114,7 +115,7 @@ describe("buildUptoMiddleware", () => {
   it("returns 400 for malformed payment header", async () => {
     const routes = makeRoutes();
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn));
+    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn, FACILITATOR));
     app.post("/v1/chat/completions", (c) => c.json({ result: "ok" }));
 
     const res = await app.request("/v1/chat/completions", {
@@ -131,7 +132,7 @@ describe("buildUptoMiddleware", () => {
     const routes = makeRoutes();
     const meterFn = routes["POST /v1/chat/completions"].meter;
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn));
+    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn, FACILITATOR));
     app.post("/v1/chat/completions", (c) => c.json({ result: "inference done" }));
 
     const paymentPayload = makePaymentPayload();
@@ -167,7 +168,7 @@ describe("buildUptoMiddleware", () => {
 
     const routes = makeRoutes();
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(routes, failVerify, settleFn));
+    app.use("*", buildUptoMiddleware(routes, failVerify, settleFn, FACILITATOR));
     app.post("/v1/chat/completions", (c) => c.json({ result: "ok" }));
 
     const paymentPayload = makePaymentPayload();
@@ -193,7 +194,7 @@ describe("buildUptoMiddleware", () => {
 
     const routes = makeRoutes();
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(routes, failVerify, settleFn));
+    app.use("*", buildUptoMiddleware(routes, failVerify, settleFn, FACILITATOR));
     app.post("/v1/chat/completions", (c) => c.json({ result: "ok" }));
 
     const paymentPayload = makePaymentPayload();
@@ -210,7 +211,7 @@ describe("buildUptoMiddleware", () => {
   it("skips settlement if handler returns error (status >= 400)", async () => {
     const routes = makeRoutes();
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn));
+    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn, FACILITATOR));
     app.post("/v1/chat/completions", (c) => c.json({ error: "bad request" }, 400));
 
     const paymentPayload = makePaymentPayload();
@@ -237,7 +238,7 @@ describe("buildUptoMiddleware", () => {
     };
 
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn));
+    app.use("*", buildUptoMiddleware(routes, verifyFn, settleFn, FACILITATOR));
     app.post("/v1/chat/completions", (c) => c.json({ result: "ok" }));
 
     const res = await app.request("/v1/chat/completions", { method: "POST" });
@@ -257,7 +258,7 @@ describe("buildUptoMiddleware", () => {
           meter: vi.fn(async () => "0"),
         },
       };
-      expect(() => buildUptoMiddleware(routes, verifyFn, settleFn)).toThrow(/price/);
+      expect(() => buildUptoMiddleware(routes, verifyFn, settleFn, FACILITATOR)).toThrow(/price/);
     });
 
     it("rejects $0.00 maxPrice at construction", () => {
@@ -269,7 +270,7 @@ describe("buildUptoMiddleware", () => {
           meter: vi.fn(async () => "0"),
         },
       };
-      expect(() => buildUptoMiddleware(routes, verifyFn, settleFn)).toThrow(/greater than 0/);
+      expect(() => buildUptoMiddleware(routes, verifyFn, settleFn, FACILITATOR)).toThrow(/greater than 0/);
     });
 
     it("rejects garbage maxPrice at construction", () => {
@@ -281,7 +282,7 @@ describe("buildUptoMiddleware", () => {
           meter: vi.fn(async () => "0"),
         },
       };
-      expect(() => buildUptoMiddleware(routes, verifyFn, settleFn)).toThrow();
+      expect(() => buildUptoMiddleware(routes, verifyFn, settleFn, FACILITATOR)).toThrow();
     });
   });
 });

@@ -1,6 +1,8 @@
 import { wrapProbe } from "../wrap.js";
 
-const MIN_BALANCE_WEI = 1_000_000_000_000_000n; // 0.001 ETH
+// Warn threshold per docs/MAINNET-RUNBOOK.md §7: warn when the facilitator
+// gas wallet drops below 0.01 ETH (a few hundred settlements of headroom).
+const MIN_BALANCE_WEI = 10_000_000_000_000_000n; // 0.01 ETH
 
 export const gasEstimate = wrapProbe("gas-estimate", async (target, signal) => {
   if (target.facilitator === null) {

@@ -83,10 +83,17 @@ function createRemoteSettle<TArgs extends unknown[]>(
  *
  * Optionally accepts a `ResilientFetchConfig` to tune retry and circuit breaker behavior.
  * By default, retries up to 2 times with exponential backoff on network/5xx errors.
+ *
+ * `facilitatorAddress` is the remote facilitator's settlement wallet address
+ * (shown at its `/supported` endpoint). It is advertised to clients in the
+ * 402 response (`extra.facilitator`) because the canonical upto proxy witness
+ * binds the one address allowed to settle. Explicit config injection — no
+ * hidden fetches.
  */
 export function remoteUptoPaymentMiddleware(
   routes: UptoRoutesConfig,
   facilitatorUrl: string,
+  facilitatorAddress: `0x${string}`,
   resilientConfig?: ResilientFetchConfig,
   options?: MiddlewareOptions,
 ): MiddlewareHandler {
@@ -101,6 +108,7 @@ export function remoteUptoPaymentMiddleware(
       requirements,
       settlementAmount,
     })),
+    facilitatorAddress,
     options,
   );
 }

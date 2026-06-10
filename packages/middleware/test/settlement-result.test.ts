@@ -33,6 +33,7 @@ vi.mock("@x402cloud/evm", async () => {
 });
 
 const TEST_PAY_TO = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88";
+const FACILITATOR = "0x9999999999999999999999999999999999999999" as const;
 
 function makeRoutes(): UptoRoutesConfig {
   return {
@@ -56,7 +57,7 @@ function makeHeader(): string {
         spender: "0x000000000022D473030F116dDEE9F6B43aC78BA3" as `0x${string}`,
         nonce: "1",
         deadline: "9999999999",
-        witness: { to: TEST_PAY_TO as `0x${string}`, validAfter: "0", extra: "0x" as `0x${string}` },
+        witness: { to: TEST_PAY_TO as `0x${string}`, facilitator: FACILITATOR as `0x${string}`, validAfter: "0" },
       },
     },
   };
@@ -85,7 +86,7 @@ describe("settlement outcome recording (durability)", () => {
       success: true, transaction: "0xtx", network: "eip155:8453", settledAmount: "5000",
     }));
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(makeRoutes(), verifyOk, settleFn, rec.options));
+    app.use("*", buildUptoMiddleware(makeRoutes(), verifyOk, settleFn, FACILITATOR, rec.options));
     app.post("/v1/chat/completions", (c) => c.json({ ok: true }));
 
     const res = await app.request("/v1/chat/completions", {
@@ -109,7 +110,7 @@ describe("settlement outcome recording (durability)", () => {
       success: false, errorReason: "settlement_failed: nonce already used",
     }));
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(makeRoutes(), verifyOk, settleFn, rec.options));
+    app.use("*", buildUptoMiddleware(makeRoutes(), verifyOk, settleFn, FACILITATOR, rec.options));
     app.post("/v1/chat/completions", (c) => c.json({ ok: true }));
 
     await app.request("/v1/chat/completions", {
@@ -130,7 +131,7 @@ describe("settlement outcome recording (durability)", () => {
     const rec = makeRecorder();
     const settleFn: SettleFn = vi.fn(async () => { throw new Error("RPC down"); });
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(makeRoutes(), verifyOk, settleFn, rec.options));
+    app.use("*", buildUptoMiddleware(makeRoutes(), verifyOk, settleFn, FACILITATOR, rec.options));
     app.post("/v1/chat/completions", (c) => c.json({ ok: true }));
 
     await app.request("/v1/chat/completions", {
@@ -152,7 +153,7 @@ describe("settlement outcome recording (durability)", () => {
       success: true, transaction: "0xtx", network: "eip155:8453", settledAmount: "5000",
     }));
     const app = new Hono();
-    app.use("*", buildUptoMiddleware(makeRoutes(), verifyOk, settleFn, rec.options));
+    app.use("*", buildUptoMiddleware(makeRoutes(), verifyOk, settleFn, FACILITATOR, rec.options));
     app.post("/v1/chat/completions", (c) => c.json({ error: "bad" }, 400));
 
     await app.request("/v1/chat/completions", {
@@ -188,7 +189,7 @@ describe("remote settle maps facilitator responses to a definite outcome", () =>
     const rec = makeRecorder();
     stubFacilitator({ success: false, errorReason: "settlement_failed: reverted" });
     const app = new Hono();
-    app.use("*", remoteUptoPaymentMiddleware(makeRoutes(), "https://facilitator.test", undefined, rec.options));
+    app.use("*", remoteUptoPaymentMiddleware(makeRoutes(), "https://facilitator.test", FACILITATOR, undefined, rec.options));
     app.post("/v1/chat/completions", (c) => c.json({ ok: true }));
 
     await app.request("/v1/chat/completions", {
@@ -205,7 +206,7 @@ describe("remote settle maps facilitator responses to a definite outcome", () =>
     const rec = makeRecorder();
     stubFacilitator({ error: "boom" }, 500);
     const app = new Hono();
-    app.use("*", remoteUptoPaymentMiddleware(makeRoutes(), "https://facilitator.test", { maxRetries: 0 }, rec.options));
+    app.use("*", remoteUptoPaymentMiddleware(makeRoutes(), "https://facilitator.test", FACILITATOR, { maxRetries: 0 }, rec.options));
     app.post("/v1/chat/completions", (c) => c.json({ ok: true }));
 
     await app.request("/v1/chat/completions", {
@@ -225,7 +226,7 @@ describe("remote settle maps facilitator responses to a definite outcome", () =>
     const rec = makeRecorder();
     stubFacilitator({ success: true, transaction: "0xabc", network: "eip155:8453", settledAmount: "5000" });
     const app = new Hono();
-    app.use("*", remoteUptoPaymentMiddleware(makeRoutes(), "https://facilitator.test", undefined, rec.options));
+    app.use("*", remoteUptoPaymentMiddleware(makeRoutes(), "https://facilitator.test", FACILITATOR, undefined, rec.options));
     app.post("/v1/chat/completions", (c) => c.json({ ok: true }));
 
     await app.request("/v1/chat/completions", {

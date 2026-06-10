@@ -1,11 +1,11 @@
 # @x402cloud/evm
 
-EVM payment scheme implementations for the x402 protocol. Supports both **exact** (fixed price) and **upto** (metered) payment schemes using Uniswap Permit2.
+EVM payment scheme implementations for the x402 protocol. Supports both **exact** (fixed price) and **upto** (metered) payment schemes using Uniswap Permit2. All chain interactions go through `viem`.
 
 ## Install
 
 ```bash
-npm install @x402cloud/evm
+pnpm add @x402cloud/evm
 ```
 
 ## Usage
@@ -36,24 +36,38 @@ const requirements: PaymentRequirements = {
 const payload = await createUptoPayload(signer, requirements);
 ```
 
-### Server: verify and settle
+### Server: parse, verify, settle
 
 ```ts
-import { verifyUpto, settleUpto } from "@x402cloud/evm";
-import type { FacilitatorSigner, UptoPayload } from "@x402cloud/evm";
+import { parseUptoPayload, verifyUpto, settleUpto } from "@x402cloud/evm";
+
+// Validate untrusted decoded input at the boundary (throws on malformed payloads)
+const payload = parseUptoPayload(decodedHeader);
 
 // Verify (read-only, no gas)
 const result = await verifyUpto(signer, payload, requirements);
 // { isValid: true, payer: "0x..." }
 
-// Settle for actual usage (on-chain tx)
+// Settle for actual usage (on-chain tx) — must be <= authorized amount
 await settleUpto(signer, payload, requirements, "50000"); // settle for $0.05
+```
+
+### Confirm an already-broadcast settlement
+
+```ts
+import { confirmSettlement } from "@x402cloud/evm";
+
+// Looks up the receipt for a known tx hash — never re-broadcasts.
+// Used by durable retry paths for transactions stuck awaiting a receipt.
+const result = await confirmSettlement(signer, txHash, network, settledAmount);
 ```
 
 ### Constants
 
 ```ts
 import {
+  CHAINS,                  // CAIP-2 -> viem Chain
+  resolveNetwork,          // "base" or "eip155:8453" -> CAIP-2 identifier
   PERMIT2_ADDRESS,         // Canonical Permit2 address (all EVM chains)
   X402_UPTO_PROXY,         // x402 upto settlement proxy
   X402_EXACT_PROXY,        // x402 exact settlement proxy
@@ -67,14 +81,22 @@ The EVM package uses minimal signer interfaces so you can plug in any wallet:
 
 - **`ClientSigner`** -- client-side, needs `address` + `signTypedData`
 - **`VerifySigner`** -- read-only, needs `readContract` + `verifyTypedData`
-- **`FacilitatorSigner`** -- extends VerifySigner with `writeContract` + `waitForTransactionReceipt`
+- **`FacilitatorSigner`** -- extends VerifySigner with two-step settlement (`signSettlementTx` + `sendRawSettlementTx`) and `waitForTransactionReceipt`
+
+`verifyUpto`/`verifyExact` take a `VerifySigner`; `settleUpto`/`settleExact` take a `FacilitatorSigner`. Each function requires only what it needs.
 
 ## Exports
 
-**Functions:** `createUptoPayload`, `verifyUpto`, `settleUpto`, `createExactPayload`, `verifyExact`, `settleExact`, `parseChainId`, `permit2Domain`
+**Schemes:** `createUptoPayload`, `verifyUpto`, `settleUpto`, `createExactPayload`, `verifyExact`, `settleExact`, `confirmSettlement`
 
-**Constants:** `PERMIT2_ADDRESS`, `X402_EXACT_PROXY`, `X402_UPTO_PROXY`, `DEFAULT_USDC_ADDRESSES`, `permit2WitnessTypes`, `erc20Abi`, `uptoProxyAbi`, `exactProxyAbi`
+**Parsing:** `parseUptoPayload`, `parseExactPayload`
 
-**Types:** `UptoPayload`, `ExactPayload`, `Permit2Witness`, `Permit2Authorization`, `ClientSigner`, `VerifySigner`, `FacilitatorSigner`
+**Constants:** `CHAINS`, `NETWORK_NAME_TO_CAIP2`, `resolveNetwork`, `PERMIT2_ADDRESS`, `X402_UPTO_PROXY`, `X402_EXACT_PROXY`, `PROXY_ADDRESSES`, `proxyAddresses`, `DEFAULT_USDC_ADDRESSES`, `permit2Domain`, `permit2WitnessTypes`, `erc20Abi`, `uptoProxyAbi`, `exactProxyAbi`
 
-## Part of [x402cloud](https://github.com/x402cloud/x402cloud)
+**Utils:** `parseChainId`, `parseUnixSeconds`, `MAX_UNIX_SECONDS`, `sanitizeErrorMessage`
+
+**Types:** `UptoPayload`, `ExactPayload`, `Permit2Witness`, `Permit2Authorization`, `ClientSigner`, `VerifySigner`, `FacilitatorSigner`, `ProxyAddresses`
+
+## License
+
+MIT — part of [x402cloud](https://github.com/x402cloud/x402cloud)
