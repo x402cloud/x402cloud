@@ -164,7 +164,52 @@ manager for Docker.
 
 ---
 
-## CI
+## Workers Builds — Git-connected deploys (no API keys)
+
+Each Worker connects to this repo via Cloudflare's native Git integration:
+push to `main` deploys production, and every PR gets a build with a
+[preview URL](https://developers.cloudflare.com/workers/versions-and-deployments/preview-urls/)
+commented on the PR. No tokens live in GitHub — Cloudflare generates and
+holds its own deploy token per project when you connect. Existing Worker
+secrets (set via `wrangler secret put`) persist across these deploys.
+
+**Connecting is dashboard-only** (wrangler has no command for it), one time
+per Worker: dash.cloudflare.com (x402cloud account) → **Workers & Pages** →
+select the Worker → **Settings → Builds → Connect**. First time, GitHub will
+prompt to install the *Cloudflare Workers and Pages* app on the `x402cloud`
+org — grant it this repo only.
+
+Use these settings for every Worker (only the root directory differs):
+
+| Setting | Value |
+|---|---|
+| Repository | `x402cloud/x402cloud` |
+| Production branch | `main` |
+| Root directory | `apps/<app>` (see table below) |
+| Build command | `pnpm run -w build` |
+| Deploy command | `npx wrangler deploy` |
+| Non-production branch command | `npx wrangler versions upload` (default) |
+| Build watch paths — include | `apps/<app>/**`, `packages/**`, `pnpm-lock.yaml` |
+
+The build command runs turbo at the workspace root so `@x402cloud/*`
+packages build first; the deploy runs in the app directory so wrangler picks
+up the right `wrangler.toml` (the dashboard Worker name must match its
+`name` field — table below). Watch paths stop the other six Workers from
+rebuilding on unrelated commits.
+
+| Root directory | Dashboard Worker name (`wrangler.toml` name) | Notes |
+|---|---|---|
+| `apps/facilitator-api` | `x402cloud-facilitator` | live — secrets already set, untouched by builds |
+| `apps/infer` | `infer-x402cloud` | live |
+| `apps/status` | `x402cloud-status` | live |
+| `apps/indexer` | `x402cloud-indexer` | live; crons do not fire on PR preview versions |
+| `apps/marketplace` | `x402cloud-marketplace` | connect when ready |
+| `apps/sandbox` | `x402cloud-sandbox` | connect when ready |
+| `apps/scrape` | `x402cloud-scrape` | connect when ready |
+
+`site/` (Pages) stays on manual `wrangler pages deploy`: Pages Git
+integration cannot be added to an existing direct-upload project — adding it
+would mean recreating the Pages project. Do that separately if wanted.
 
 `.github/workflows/ci.yml` runs `pnpm build`, `pnpm typecheck`, and unit
 tests on every PR. E2E tests run against Base Sepolia on pushes to `main`
