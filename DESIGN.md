@@ -64,8 +64,10 @@ that file, not this one, is the source of truth for what's live where.
   +----+---------+------------+
   |               |            |
 client        middleware   facilitator     agent (client + catalog lookup)
-       ↑                                       ↑
-   discovery, manifests, probes  ← standalone, no dependency on protocol/evm
+                    ↑
+                manifests  ← protocol + middleware (applyMargin, DEFAULT_MARGIN_BPS)
+       ↑
+   discovery, probes  ← standalone, no dependency on protocol/evm
        ↑
      apps/*  ← packages only, never depend on each other directly
 ```
