@@ -2,6 +2,9 @@
 
 Open-source implementation of the [x402 protocol](https://www.x402.org/) standard.
 
+See [VISION.md](VISION.md) for the why, [DESIGN.md](DESIGN.md) for the architecture and data
+contracts, and [CLAUDE.md](CLAUDE.md) for repo conventions.
+
 [![CI](https://github.com/x402cloud/x402cloud/actions/workflows/ci.yml/badge.svg)](https://github.com/x402cloud/x402cloud/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](.nvmrc)
@@ -39,6 +42,7 @@ app.use("*", remoteUptoPaymentMiddleware(
     },
   },
   "https://facilitator.x402cloud.ai",
+  "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88", // facilitator's settlement wallet (its /supported endpoint)
 ));
 
 app.post("/v1/chat/completions", (c) => c.json({ message: "hello" }));
@@ -74,6 +78,10 @@ const res = await payingFetch("https://api.example.com/v1/chat/completions", {
 | [`@x402cloud/client`](packages/client) | Auto-pay 402 responses | `npm i @x402cloud/client` |
 | [`@x402cloud/middleware`](packages/middleware) | Server middleware (Hono) | `npm i @x402cloud/middleware` |
 | [`@x402cloud/facilitator`](packages/facilitator) | Verify + settle payments | `npm i @x402cloud/facilitator` |
+| [`@x402cloud/agent`](packages/agent) | Agent SDK — discover marketplace services, auto-pay | `npm i @x402cloud/agent` |
+| [`@x402cloud/discovery`](packages/discovery) | Discovery surfaces (openapi.json, llms.txt, agent-card, sitemap.xml) | `npm i @x402cloud/discovery` |
+| [`@x402cloud/manifests`](packages/manifests) | Service catalog + pricing source of truth | `npm i @x402cloud/manifests` |
+| [`@x402cloud/probes`](packages/probes) | Health/readiness probes for x402cloud infra | `npm i @x402cloud/probes` |
 
 ## Architecture
 
@@ -97,6 +105,7 @@ client   middleware  facilitator
 |---------|-----|-------------|
 | Inference API | [infer.x402cloud.ai](https://infer.x402cloud.ai) | Pay-per-call AI inference (OpenAI-compatible) |
 | Facilitator | [facilitator.x402cloud.ai](https://facilitator.x402cloud.ai) | Payment verification and settlement |
+| Status | [status.x402cloud.ai](https://status.x402cloud.ai) | Public health/readiness dashboard |
 
 ## How x402 Works
 
