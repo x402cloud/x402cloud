@@ -9,6 +9,21 @@ they are versioned together until a package needs to diverge.
 
 ## [Unreleased]
 
+### Added
+- **Casper network support (`@x402cloud/casper`).** New package implementing the
+  `exact` scheme on Casper mainnet (`casper:casper`) and testnet
+  (`casper:casper-test`), settling **wCSPR** (CEP-18, 9 decimals). Verification
+  and settlement are delegated over HTTP to the hosted Casper x402 facilitator
+  (`POST /verify`, `POST /settle`, `GET /supported`), so no Casper private key
+  is read, stored, or required by this repository. Configurable via
+  `CASPER_FACILITATOR_URL`, `CASPER_FACILITATOR_TIMEOUT_MS`,
+  `CASPER_WCSPR_CONTRACT` and `CASPER_TESTNET_WCSPR_CONTRACT`. Mote arithmetic
+  uses `BigInt` and throws on sub-mote precision rather than truncating, and all
+  facilitator/network failures fail closed through a named error taxonomy.
+  `createCasperSchemes()` returns handlers in the same `SchemeHandler` shape
+  `@x402cloud/facilitator` already dispatches on. Existing EVM code is
+  unchanged.
+
 ### Changed — BREAKING (pre-publish, no released versions affected)
 - **Canonical Coinbase proxy migration (mainnet unblock).** All schemes now
   target the canonical CREATE2-deployed proxies — Upto

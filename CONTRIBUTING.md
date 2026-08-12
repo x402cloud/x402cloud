@@ -23,6 +23,7 @@ pnpm build
 packages/
   protocol/     — Core types and header encoding (zero deps)
   evm/          — EVM payment schemes (Permit2)
+  casper/       — Casper payment scheme (wCSPR, hosted facilitator)
   middleware/   — Hono server middleware
   client/       — Client SDK (auto-pays 402 responses)
   facilitator/  — Facilitator core logic
