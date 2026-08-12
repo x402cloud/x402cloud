@@ -2,6 +2,9 @@
 
 Open-source implementation of the x402 protocol standard.
 
+See [`VISION.md`](VISION.md) for the why and [`DESIGN.md`](DESIGN.md) for the shape
+(architecture, dependency graph, data contracts) — this file is how to work here.
+
 ## Monorepo Structure
 
 ```
@@ -11,17 +14,32 @@ packages/           ← npm packages (published to @x402cloud/*)
   client/           ← client SDK (auto-pay 402 responses)
   middleware/       ← server middleware (Hono, generic)
   facilitator/      ← facilitator core logic (verify, settle)
+  agent/            ← agent SDK — discover marketplace services + auto-pay in one import
+  discovery/        ← builders for discovery surfaces (openapi.json, llms.txt, agent-card, sitemap.xml, robots.txt, api-catalog)
+  manifests/        ← service catalog + pricing source of truth, shared by the marketplace and each priced service
+  probes/           ← health/readiness probes for x402cloud infra (used by apps/status)
 
 apps/               ← deployed services
-  facilitator-api/  ← hosted facilitator at x402cloud.ai
+  facilitator-api/  ← hosted facilitator at facilitator.x402cloud.ai
+  facilitator-docker/ ← self-hosted Docker packaging of the same facilitator core
   infer/            ← AI inference API (infer.x402cloud.ai)
+  sandbox/          ← pay-per-call code execution service
+  scrape/           ← pay-per-call web scraping service
+  marketplace/      ← x402 service catalog + discovery surfaces
+  status/           ← public status dashboard (status.x402cloud.ai)
+  indexer/          ← cron-driven on-chain settlement indexer
+  x402-indexer/     ← Goldsky pipeline definition (on-chain event indexing)
   acp-seller/       ← Virtuals ACP marketplace seller runtime
+
+site/               ← x402cloud.ai static site
 
 tests/              ← integration & e2e tests (compose real pieces)
   e2e/              ← on-chain e2e on Base Sepolia
 
 examples/           ← usage examples
 ```
+
+Deploy status and per-app deploy recipes: [`DEPLOY.md`](DEPLOY.md).
 
 ## Dependency Rules
 
