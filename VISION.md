@@ -34,6 +34,10 @@ The best x402 implementation wins developers. Developers who adopt the library d
 - `@x402cloud/client` — auto-pay 402 responses from any HTTP client
 - `@x402cloud/middleware` — server middleware (Hono, generic)
 - `@x402cloud/facilitator` — verify + settle logic
+- `@x402cloud/agent` — agent SDK: discover marketplace services and auto-pay in one import
+- `@x402cloud/discovery` — builders for x402 discovery surfaces (openapi, agent-card, llms.txt, sitemap.xml, robots.txt, api-catalog)
+- `@x402cloud/manifests` — service catalog + pricing source of truth, shared by the marketplace and each priced service
+- `@x402cloud/probes` — health/readiness probes for x402cloud infrastructure
 
 **Why we win:**
 - Chain-agnostic from day 1 (any EVM chain, extensible to Solana)
@@ -123,4 +127,7 @@ Agent → HTTPS → Cloudflare Edge (330+ cities)
                     Response + Settlement
 ```
 
-No origin servers. No databases. No state. Pure edge compute.
+No origin servers. Not fully stateless, though: settlement coordination
+(`facilitator-api`'s `SettlementDO`) and the on-chain indexer (KV cursor, R2
+analytics) hold state in Cloudflare-native primitives, not a traditional
+database. Edge compute throughout.
