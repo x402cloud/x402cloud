@@ -40,13 +40,13 @@ const SCRAPE_ROWS: ReadonlyArray<ScrapeRow> = Object.freeze([
  * Both scrape routes share the same worst-case wholesale (30s browser
  * time + per-request fee), so they share a single retail maxPrice string.
  */
-function scrapeMaxPrice(marginBps: number): string {
-  return retailDisplay(maxWholesaleCost(), marginBps);
+function scrapeMaxPrice(marginBps: number, feeFloorMicro: string): string {
+  return retailDisplay(maxWholesaleCost(), marginBps, feeFloorMicro);
 }
 
 export function scrapeManifest(p: ManifestParams): MarketplaceService[] {
   const marginBps = p.marginBps ?? DEFAULT_MARGIN_BPS;
-  const maxPrice = scrapeMaxPrice(marginBps);
+  const maxPrice = scrapeMaxPrice(marginBps, p.feeFloorMicro ?? "0");
   return SCRAPE_ROWS.map((row) => ({
     id: row.id,
     category: "scraping" as const,
@@ -70,7 +70,7 @@ export function scrapeManifest(p: ManifestParams): MarketplaceService[] {
 
 export function scrapeEntries(p: ManifestParams): ServiceManifestEntry[] {
   const marginBps = p.marginBps ?? DEFAULT_MARGIN_BPS;
-  const maxPrice = scrapeMaxPrice(marginBps);
+  const maxPrice = scrapeMaxPrice(marginBps, p.feeFloorMicro ?? "0");
   return SCRAPE_ROWS.map((row) => ({
     path: `/${row.key}`,
     id: row.id,

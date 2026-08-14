@@ -40,13 +40,13 @@ const SANDBOX_ROWS: ReadonlyArray<SandboxRow> = Object.freeze([
  * All sandbox runtimes share the same worst-case wholesale (30s container
  * time), so they share a single retail maxPrice string.
  */
-function sandboxMaxPrice(marginBps: number): string {
-  return retailDisplay(maxWholesaleCost(), marginBps);
+function sandboxMaxPrice(marginBps: number, feeFloorMicro: string): string {
+  return retailDisplay(maxWholesaleCost(), marginBps, feeFloorMicro);
 }
 
 export function sandboxManifest(p: ManifestParams): MarketplaceService[] {
   const marginBps = p.marginBps ?? DEFAULT_MARGIN_BPS;
-  const maxPrice = sandboxMaxPrice(marginBps);
+  const maxPrice = sandboxMaxPrice(marginBps, p.feeFloorMicro ?? "0");
   return SANDBOX_ROWS.map((row) => ({
     id: row.id,
     category: "sandbox" as const,
@@ -70,7 +70,7 @@ export function sandboxManifest(p: ManifestParams): MarketplaceService[] {
 
 export function sandboxEntries(p: ManifestParams): ServiceManifestEntry[] {
   const marginBps = p.marginBps ?? DEFAULT_MARGIN_BPS;
-  const maxPrice = sandboxMaxPrice(marginBps);
+  const maxPrice = sandboxMaxPrice(marginBps, p.feeFloorMicro ?? "0");
   return SANDBOX_ROWS.map((row) => ({
     path: `/${row.key}`,
     id: row.id,

@@ -30,4 +30,13 @@ describe("sandboxManifest", () => {
       expect(e.maxPrice).toBe(m.get(e.id));
     }
   });
+
+  it("feeFloorMicro (workspace#45) defaults to 0 and, when set, raises maxPrice", () => {
+    const noFloor = sandboxManifest(params)[0].payment.maxPrice;
+    const withDefaultZero = sandboxManifest({ ...params, feeFloorMicro: "0" })[0].payment.maxPrice;
+    expect(withDefaultZero).toBe(noFloor);
+
+    const withFloor = sandboxManifest({ ...params, feeFloorMicro: "500000" })[0].payment.maxPrice;
+    expect(withFloor).not.toBe(noFloor);
+  });
 });

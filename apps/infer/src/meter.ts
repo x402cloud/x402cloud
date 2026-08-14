@@ -39,7 +39,7 @@ export function createMeter(
   const config = MODELS[modelName];
   if (!config) throw new Error(`Unknown model: ${modelName}`);
 
-  return async ({ request, response, authorizedAmount }) => {
+  return async ({ request, response, authorizedAmount, settlementFee }) => {
     let wholesale: string;
 
     if (config.type === "image") {
@@ -104,7 +104,11 @@ export function createMeter(
       wholesale = wholesaleTextCost(config.neurons, inputTokens, outputTokens);
     }
 
-    return retailPrice(wholesale, authorizedAmount, marginBps);
+    // settlementFee rides the /verify response (workspace#45) — the current
+    // gas-cost floor for this settle, computed by the facilitator that pays
+    // for it. Absent (e.g. testnet, or a facilitator that predates this
+    // field) means no floor, matching the pre-existing behaviour exactly.
+    return retailPrice(wholesale, authorizedAmount, marginBps, settlementFee ?? "0");
   };
 }
 

@@ -68,4 +68,18 @@ describe("createMeter", () => {
     const expected = retailPrice(maxWholesaleCost(), "1000000000", 2000);
     expect(cost).toBe(expected);
   });
+
+  it("a settlementFee riding on ctx floors the retail price (workspace#45)", async () => {
+    const meter = createMeter();
+    const bigFee = "999999999"; // far above 20% margin on a short-duration call
+    const cost = await meter({
+      request: makeRequest(),
+      response: makeResponse({ durationMs: 100 }),
+      authorizedAmount: "9999999999",
+      payer: PAYER,
+      settlementFee: bigFee,
+    });
+    const expected = retailPrice(wholesaleForDurationMs(100), "9999999999", 2000, bigFee);
+    expect(cost).toBe(expected);
+  });
 });

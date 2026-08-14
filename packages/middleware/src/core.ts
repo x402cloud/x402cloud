@@ -52,12 +52,17 @@ function uptoStrategy(verify: VerifyFn, settle: SettleFn, facilitator: `0x${stri
           return null;
         }
 
-        // Meter actual usage
+        // Meter actual usage. settlementFee/feeDegraded ride the verify result
+        // that already admitted this request (workspace#45) — the meter can
+        // floor its retail price at the current gas cost without a second
+        // call to the facilitator.
         const consumedAmount = await routeConfig.meter({
           request,
           response,
           authorizedAmount: payload.permit2Authorization.permitted.amount,
           payer: verification.payer,
+          settlementFee: verification.settlementFee,
+          feeDegraded: verification.feeDegraded,
         });
 
         // One settlement intent: its id ties the pre-fire record to the

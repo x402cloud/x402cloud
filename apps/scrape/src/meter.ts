@@ -21,14 +21,16 @@ import { maxWholesaleCost, wholesaleForDurationMs } from "./pricing.js";
  *   from middleware — pass an explicit value to override per route.
  */
 export function createMeter(marginBps = DEFAULT_MARGIN_BPS): MeterFunction {
-  return async ({ response, authorizedAmount }) => {
+  return async ({ response, authorizedAmount, settlementFee }) => {
     const durationMs = await extractDurationMs(response);
 
     const wholesale = Number.isFinite(durationMs)
       ? wholesaleForDurationMs(durationMs)
       : maxWholesaleCost();
 
-    return retailPrice(wholesale, authorizedAmount, marginBps);
+    // settlementFee rides the /verify response (workspace#45) — see infer's
+    // meter.ts for the full rationale. Absent means no floor.
+    return retailPrice(wholesale, authorizedAmount, marginBps, settlementFee ?? "0");
   };
 }
 

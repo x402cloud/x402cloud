@@ -1,5 +1,5 @@
 import { Hono, type MiddlewareHandler } from "hono";
-import type { PaymentRequirements } from "@x402cloud/protocol";
+import type { PaymentRequirements, Scheme } from "@x402cloud/protocol";
 import type { UptoPayload, ExactPayload } from "@x402cloud/evm";
 import type { Facilitator } from "./types.js";
 
@@ -68,6 +68,32 @@ export function createFacilitatorRoutes(
     const f = getFacilitator();
     const result = await f.settle(body.payload, body.requirements, body.settlementAmount);
     return c.json(result);
+  });
+
+  // ── Fee quote (workspace#45) ────────────────────────────────────────
+  // Public and unauthenticated, like /supported — it is a price quote, not a
+  // mutation, so it is deliberately NOT in the `options.auth` route list
+  // above. Lets a server set its 402 `maxPrice` with fee headroom included
+  // (quote time) without needing the facilitator's bearer token.
+  routes.get("/fee", async (c) => {
+    const schemeParam = c.req.query("scheme");
+    const scheme: Scheme = schemeParam === "exact" ? "exact" : "upto";
+
+    const f = getFacilitator();
+    if (!f.estimateFee) {
+      return c.json({ error: "fee_estimation_unavailable" }, 501);
+    }
+
+    const estimate = await f.estimateFee(scheme);
+    const body = {
+      scheme,
+      network: f.network,
+      settlementFee: estimate.microUsdc,
+      degraded: estimate.degraded,
+    };
+    // Surface the degraded state on the wire (workspace#45), not just in the
+    // body — a caller that only checks status/headers still sees it.
+    return c.json(body, 200, estimate.degraded ? { "X-Fee-Degraded": "true" } : {});
   });
 
   // ── Exact: Verify ───────────────────────────────────────────────────

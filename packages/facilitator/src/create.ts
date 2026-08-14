@@ -23,7 +23,11 @@ import {
   type UptoPayload,
   type ExactPayload,
 } from "@x402cloud/evm";
+import type { Scheme, VerifyResponse } from "@x402cloud/protocol";
 import type { FacilitatorConfig, Facilitator } from "./types.js";
+import { computeSettlementFee, type FeeEstimate } from "./fee.js";
+import { cachedFeeEstimator } from "./fee-cache.js";
+import { viemFeeDataReader, viemL1DataFeeReader, chainlinkEthUsdReader } from "./fee-readers.js";
 
 /** Build a FacilitatorSigner from viem clients */
 function buildSigner(
@@ -157,6 +161,23 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
     walletClient as WalletClient<Transport, Chain>,
   );
 
+  // Computed settlement-fee floor (workspace#45) — the facilitator owns the
+  // wallet/RPC, so it's the one party that can price a settle's real gas
+  // cost. Cached with a short TTL (fee.ts's readers are three network round
+  // trips) and fails closed per-reader (fee.ts) rather than ever guessing.
+  const typedPublicClient = publicClient as PublicClient<Transport, Chain>;
+  const estimateFeeUncached = (scheme: Scheme): Promise<FeeEstimate> =>
+    computeSettlementFee({
+      scheme,
+      network: config.network,
+      readers: {
+        feeData: viemFeeDataReader(typedPublicClient),
+        l1Fee: viemL1DataFeeReader(typedPublicClient),
+        ethUsd: chainlinkEthUsdReader(typedPublicClient, config.ethUsdFeedAddress),
+      },
+    });
+  const estimateFee = cachedFeeEstimator(estimateFeeUncached);
+
   // Chain-ID guard: reject any incoming payload whose `requirements.network`
   // does not match the facilitator's configured network. This prevents a
   // misconfigured or rogue caller from submitting a Base signature to an
@@ -170,12 +191,31 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
     return { ok: true };
   }
 
+  /**
+   * Attach the current computed settlement-fee estimate to a successful
+   * verify result (workspace#45 — "ride the /verify response"). Never blocks
+   * or fails verification: if fee estimation itself throws for a reason
+   * `computeSettlementFee` didn't already catch (e.g. an unmeasured
+   * scheme/network in `SETTLE_GAS_UNITS`), the verify result is returned
+   * unenriched rather than failing a payment that otherwise verified fine.
+   */
+  async function withFeeEstimate(result: VerifyResponse, scheme: Scheme): Promise<VerifyResponse> {
+    if (!result.isValid) return result;
+    try {
+      const fee = await estimateFee(scheme);
+      return { ...result, settlementFee: fee.microUsdc, feeDegraded: fee.degraded };
+    } catch {
+      return result;
+    }
+  }
+
   const schemes: Record<string, import("./types.js").SchemeHandler> = {
     upto: {
-      verify: (payload, requirements) => {
+      verify: async (payload, requirements) => {
         const guard = assertNetwork(requirements);
-        if (!guard.ok) return Promise.resolve({ isValid: false, invalidReason: guard.reason });
-        return verifyUpto(signer, payload as unknown as UptoPayload, requirements, account.address);
+        if (!guard.ok) return { isValid: false, invalidReason: guard.reason };
+        const result = await verifyUpto(signer, payload as unknown as UptoPayload, requirements, account.address);
+        return withFeeEstimate(result, "upto");
       },
       settle: (payload, requirements, ...args) => {
         const guard = assertNetwork(requirements);
@@ -184,10 +224,11 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
       },
     },
     exact: {
-      verify: (payload, requirements) => {
+      verify: async (payload, requirements) => {
         const guard = assertNetwork(requirements);
-        if (!guard.ok) return Promise.resolve({ isValid: false, invalidReason: guard.reason });
-        return verifyExactEvm(signer, payload as unknown as ExactPayload, requirements);
+        if (!guard.ok) return { isValid: false, invalidReason: guard.reason };
+        const result = await verifyExactEvm(signer, payload as unknown as ExactPayload, requirements);
+        return withFeeEstimate(result, "exact");
       },
       settle: (payload, requirements) => {
         const guard = assertNetwork(requirements);
@@ -201,13 +242,15 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
     address: account.address,
     network: config.network,
     schemes,
+    estimateFee,
 
     // Backwards-compatible convenience methods — delegate to the schemes map
     // so the network guard applies uniformly.
     async verify(payload, requirements) {
       const guard = assertNetwork(requirements);
       if (!guard.ok) return { isValid: false, invalidReason: guard.reason };
-      return verifyUpto(signer, payload, requirements, account.address);
+      const result = await verifyUpto(signer, payload, requirements, account.address);
+      return withFeeEstimate(result, "upto");
     },
 
     async settle(payload, requirements, settlementAmount) {
@@ -219,7 +262,8 @@ export function createFacilitator(config: FacilitatorConfig): Facilitator {
     async verifyExact(payload, requirements) {
       const guard = assertNetwork(requirements);
       if (!guard.ok) return { isValid: false, invalidReason: guard.reason };
-      return verifyExactEvm(signer, payload, requirements);
+      const result = await verifyExactEvm(signer, payload, requirements);
+      return withFeeEstimate(result, "exact");
     },
 
     async settleExact(payload, requirements) {

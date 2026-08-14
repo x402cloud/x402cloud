@@ -54,16 +54,16 @@ type InferRow = {
  *   embed: 8192 input tokens (max context)
  *   image: 1 generation at 1024x1024, 4 steps
  */
-function maxPriceFor(row: InferRow, marginBps: number): string {
+function maxPriceFor(row: InferRow, marginBps: number, feeFloorMicro: string): string {
   const neurons = INFER_NEURONS[row.key];
   if (!neurons) throw new Error(`No neuron rate for infer model: ${row.key}`);
   if (row.kind === "image") {
-    return retailDisplay(wholesaleImageCost(IMAGE_NEURONS_PER_GEN), marginBps);
+    return retailDisplay(wholesaleImageCost(IMAGE_NEURONS_PER_GEN), marginBps, feeFloorMicro);
   }
   if (row.kind === "embed") {
-    return retailDisplay(wholesaleEmbedCost(neurons, 8192), marginBps);
+    return retailDisplay(wholesaleEmbedCost(neurons, 8192), marginBps, feeFloorMicro);
   }
-  return retailDisplay(wholesaleTextCost(neurons, 500, 2000), marginBps);
+  return retailDisplay(wholesaleTextCost(neurons, 500, 2000), marginBps, feeFloorMicro);
 }
 
 const INFER_ROWS: ReadonlyArray<InferRow> = Object.freeze([
@@ -148,6 +148,7 @@ const INFER_ROWS: ReadonlyArray<InferRow> = Object.freeze([
 /** Marketplace catalog entries for apps/infer. */
 export function inferManifest(p: ManifestParams): MarketplaceService[] {
   const marginBps = p.marginBps ?? DEFAULT_MARGIN_BPS;
+  const feeFloorMicro = p.feeFloorMicro ?? "0";
   return INFER_ROWS.map((row) => ({
     id: row.id,
     category: row.category,
@@ -161,7 +162,7 @@ export function inferManifest(p: ManifestParams): MarketplaceService[] {
       asset: p.asset,
       payTo: p.payTo,
       facilitator: p.facilitator,
-      maxPrice: maxPriceFor(row, marginBps),
+      maxPrice: maxPriceFor(row, marginBps, feeFloorMicro),
       ...(p.marginBps !== undefined ? { marginBps: p.marginBps } : {}),
     },
     tags: row.tags,
@@ -172,9 +173,10 @@ export function inferManifest(p: ManifestParams): MarketplaceService[] {
 /** Lightweight entries the Worker consumes to build its route table. */
 export function inferEntries(p: ManifestParams): ServiceManifestEntry[] {
   const marginBps = p.marginBps ?? DEFAULT_MARGIN_BPS;
+  const feeFloorMicro = p.feeFloorMicro ?? "0";
   return INFER_ROWS.map((row) => ({
     path: `/${row.key}`,
     id: row.id,
-    maxPrice: maxPriceFor(row, marginBps),
+    maxPrice: maxPriceFor(row, marginBps, feeFloorMicro),
   }));
 }

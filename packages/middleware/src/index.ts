@@ -28,7 +28,7 @@ export type { CircuitBreaker, BreakerEvent } from "./resilience.js";
 export { buildPaymentRequired, buildExactPaymentRequired } from "./response.js";
 
 // Margin helpers for marketplace merchant-of-record model
-export { applyMargin, clampToAuthorized, retailPrice, DEFAULT_MARGIN_BPS } from "./margin.js";
+export { applyMargin, computeTake, clampToAuthorized, retailPrice, DEFAULT_MARGIN_BPS } from "./margin.js";
 
 // Types
 export type { VerifyFn, SettleFn } from "./core.js";

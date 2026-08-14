@@ -37,7 +37,7 @@ Exact-scheme payments use `facilitator.verifyExact(payload, requirements)` and `
 
 ### HTTP routes (Hono)
 
-`createFacilitatorRoutes` returns a Hono app with `/verify`, `/settle`, `/verify-exact`, `/settle-exact`:
+`createFacilitatorRoutes` returns a Hono app with `/verify`, `/settle`, `/verify-exact`, `/settle-exact`, and `/fee?scheme=upto|exact` (public, unauthenticated — a price quote, like `/supported`):
 
 ```ts
 import { Hono } from "hono";
@@ -50,6 +50,28 @@ app.route("/", createFacilitatorRoutes(
   { auth: bearerAuth({ token: process.env.TOKEN! }) }, // bound directly to payment routes
 ));
 ```
+
+### Computed settlement-fee floor (workspace#45)
+
+Every settle costs real gas, paid by this facilitator's wallet. `estimateFee`
+computes a fee floor from live chain data — measured gas units, live
+base+priority fee, Base's L1 data fee, and a live Chainlink ETH/USD read —
+and fails closed (a conservative upper-bound estimate, never a guess that
+could under-charge) if any of those reads fails:
+
+```ts
+const fee = await facilitator.estimateFee!("upto"); // { microUsdc: "842", degraded: false }
+```
+
+It also rides on `verify`/`verifyExact` automatically (`settlementFee`,
+`feeDegraded` on a valid `VerifyResponse`) and backs the `/fee` route (below)
+— most callers never call `estimateFee` directly. Pair it with
+`@x402cloud/middleware`'s `retailPrice(wholesale, authorized, marginBps,
+feeFloor)` so the marketplace's take is `max(percentage margin, this fee)`,
+never a hardcoded per-call fee. Set `ethUsdFeedAddress` in
+`FacilitatorConfig` to a verified Chainlink feed address for your network —
+omitting it is safe (the fee floor just always uses the fail-closed
+fallback for that leg) but means quotes are always degraded.
 
 ### Settlement classification
 
@@ -73,6 +95,7 @@ type FacilitatorConfig = {
   chain: Chain;                  // viem Chain object
   ownAddress?: `0x${string}`;   // Optional: skip fees for own transactions
   feeBasisPoints?: number;       // Optional: fee for third-party settlements
+  ethUsdFeedAddress?: `0x${string}`; // Optional: Chainlink ETH/USD feed for the computed fee floor (workspace#45)
 };
 ```
 
@@ -80,9 +103,9 @@ Incoming payloads whose `requirements.network` does not match the configured net
 
 ## Exports
 
-**Functions:** `createFacilitator`, `createFacilitatorRoutes`, `classifySettlement`, `isTransientFailure`, `pendingReceiptTxHash`
+**Functions:** `createFacilitator`, `createFacilitatorRoutes`, `classifySettlement`, `isTransientFailure`, `pendingReceiptTxHash`, `computeSettlementFee`, `settleGasUnits`, `cachedFeeEstimator`, `viemFeeDataReader`, `viemL1DataFeeReader`, `chainlinkEthUsdReader`
 
-**Types:** `FacilitatorConfig`, `Facilitator`, `SchemeHandler`, `SettlementClass`, `CreateFacilitatorRoutesOptions`
+**Types:** `FacilitatorConfig`, `Facilitator`, `SchemeHandler`, `SettlementClass`, `CreateFacilitatorRoutesOptions`, `FeeEstimate`, `FeeReaders`, `ComputeSettlementFeeInputs`
 
 ## License
 

@@ -175,4 +175,46 @@ describe("createMeter", () => {
     });
     expect(cost).toBe(wholesaleTextCost(MODELS.fast.neurons, 500, 2000));
   });
+
+  describe("settlementFee floor (workspace#45)", () => {
+    it("without settlementFee in ctx, behaves exactly as before (no floor)", async () => {
+      const meter = createMeter("image");
+      const cost = await meter({
+        request: makeRequest({ prompt: "a cat" }),
+        response: makeResponse({ image: "base64..." }),
+        authorizedAmount: HIGH_AUTH,
+        payer: PAYER,
+      });
+      expect(cost).toBe(retailPrice(wholesaleImageCost(), HIGH_AUTH, DEFAULT_MARGIN_BPS, "0"));
+    });
+
+    it("a settlementFee riding on ctx floors a micro call above the plain margin", async () => {
+      // Image wholesale is tiny; a large settlementFee should dominate the
+      // percentage margin, exactly the "no call settles at a loss" model.
+      const wholesale = wholesaleImageCost();
+      const bigFee = "50000"; // far above 20% of the image wholesale
+      const meter = createMeter("image");
+      const cost = await meter({
+        request: makeRequest({ prompt: "a cat" }),
+        response: makeResponse({ image: "base64..." }),
+        authorizedAmount: HIGH_AUTH,
+        payer: PAYER,
+        settlementFee: bigFee,
+      });
+      expect(cost).toBe(retailPrice(wholesale, HIGH_AUTH, DEFAULT_MARGIN_BPS, bigFee));
+      expect(BigInt(cost) - BigInt(wholesale) >= BigInt(bigFee)).toBe(true);
+    });
+
+    it("a settlementFee floor still clamps to authorizedAmount", async () => {
+      const meter = createMeter("image");
+      const cost = await meter({
+        request: makeRequest({ prompt: "a cat" }),
+        response: makeResponse({ image: "base64..." }),
+        authorizedAmount: "1", // far below any real fee floor
+        payer: PAYER,
+        settlementFee: "50000",
+      });
+      expect(cost).toBe("1");
+    });
+  });
 });
