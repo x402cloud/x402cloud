@@ -104,8 +104,24 @@ Operator actions:
 
 ## Explicitly deferred (known, not blocking)
 
-- **Unit economics**: at micro-prices, mainnet gas exceeds the take per
-  call (runbook §10) — launch plan subsidises early volume.
+- **Unit economics — RESOLVED 2026-08-14 (workspace#45), subsidy plan
+  RESCINDED.** The take is now `max(wholesale × marginBps, computedFee)`
+  (`@x402cloud/middleware`'s `computeTake`/`retailPrice`), where
+  `computedFee` is `@x402cloud/facilitator`'s `computeSettlementFee` —
+  measured settle gas units × live network fees × a live ETH/USD read, with
+  a fail-closed upper-bound fallback (never under-charges) and the degraded
+  state surfaced via `/fee`'s `X-Fee-Degraded` header. Big calls still price
+  at the competitive 20% headline; only micro calls hit the floor. No call
+  settles at a loss by design, so there is nothing to subsidise — runbook
+  §10's "subsidise the first 100k calls" plan is struck (see its updated
+  text). Still open: `SETTLE_GAS_UNITS` in `packages/facilitator/src/fee.ts`
+  are engineering estimates pending real on-chain re-measurement (no
+  Foundry/anvil in the authoring environment) — `tests/e2e/gas-measurement.test.ts`
+  re-measures them on an Anvil fork and must be run (and the table corrected
+  if it drifts) before this floor prices real mainnet settlements. The
+  batch-settlement scheme that amortises gas across calls, driving the floor
+  toward zero, is filed separately (workspace#46) and is post-launch, first-priority
+  follow-up work.
 - **Multi-chain** (Arbitrum/Optimism/Polygon): USDC addresses exist in
   config; no proxies, no deploy targets.
 - **Staging environment / auto-deploy from CI**: deploys are manual by

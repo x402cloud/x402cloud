@@ -252,8 +252,43 @@ Capital + operating estimate to operationalise mainnet:
 The $250–400 envelope from the VISION discussion holds. The biggest
 variable is `FACILITATOR_KEY` top-up cadence, which is a function of how
 many settlements per day and how aggressive Base mainnet base fees get.
-At 21k gas × ~50k cost per settlement × 1 gwei base fee = ~1e-6 ETH per
-settle, i.e. ~0.001 ETH per 1000 paid calls. Profit at 20% take rate on
-~$0.005 average call = $1 per 1000 calls revenue vs ~$3 gas — **the
-service is unprofitable at micro-prices until gas drops or volume picks
-up**. Document this honestly; plan to subsidise the first 100k calls.
+
+**Unit economics — RESOLVED 2026-08-14 (workspace#45): the "subsidise the
+first 100k calls" plan below is RESCINDED.** The prior version of this
+section observed that a pure 20% take on a ~$0.005 average call (~$1 per
+1000 calls revenue) doesn't cover ~$3 of gas per 1000 calls at the gas
+levels assumed, and proposed eating the loss on early volume. Radek's
+correction: the take is a percentage of wholesale FLOORED by a *computed*
+gas cost, never a subsidy and never a hardcoded fee —
+
+```
+take   = max( wholesale × marginBps/10000, settlementFee )
+retail = clampToAuthorized( wholesale + take )
+```
+
+`settlementFee` (`@x402cloud/facilitator`'s `computeSettlementFee`) is
+measured settle gas units × live base+priority fee × Base's L1 data fee ×
+a live Chainlink ETH/USD read, times a reviewed 2x safety multiplier — see
+`packages/facilitator/src/fee.ts`. A live or degraded (fail-closed
+fallback, upper-bound-only) estimate rides on `/verify` and is quoted at
+`/fee`. Consequence: a big call still prices at the competitive 20%
+headline (the fee is absorbed); a micro call prices at gas × safety and
+therefore never settles at a loss, whatever gas or ETH/USD do. Nothing
+here needs subsidising because nothing here can lose money per call.
+
+**Competitive positioning:** at the micro end this floor prices above
+sellers settling through Coinbase's subsidised facilitator. Accepted at
+launch — not answered with a subsidy or a hardcoded undercut. The
+structural fix is the batch-settlement scheme (workspace#46, first-priority
+post-launch work) that amortises one settle's gas across many calls,
+driving the computed floor toward zero with no change to this model.
+
+**Before this floor prices a real mainnet settlement:** `SETTLE_GAS_UNITS`
+in `fee.ts` are engineering estimates, not yet re-measured from a real
+settle receipt (no Foundry/anvil available when workspace#45 landed). Run
+`tests/e2e/gas-measurement.test.ts` (Anvil fork, part of the `e2e` CI job)
+and correct the table if it drifts before relying on it here. Also set
+`ethUsdFeedAddress` on `FacilitatorConfig` to a verified Chainlink ETH/USD
+feed address for mainnet (verify against
+https://docs.chain.link/data-feeds/price-feeds/addresses — omitting it
+is safe but means every quote is degraded/fallback-priced).

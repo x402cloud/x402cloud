@@ -292,6 +292,61 @@ describe("createFacilitator", () => {
     });
   });
 
+  describe("estimateFee + fee riding on verify (workspace#45)", () => {
+    it("exposes estimateFee on the returned facilitator", () => {
+      const facilitator = createFacilitator(testConfig);
+      expect(typeof facilitator.estimateFee).toBe("function");
+    });
+
+    it("estimateFee fails closed (degraded: true) when the test config has no live RPC/oracle wiring", async () => {
+      // testConfig has no ethUsdFeedAddress, and the mocked viem client above
+      // has no getBlock/estimateMaxPriorityFeePerGas and a bare readContract
+      // mock — exactly the "nothing is actually wired to a live chain"
+      // scenario this whole module exists to fail closed on, rather than
+      // throwing or silently under-charging.
+      const facilitator = createFacilitator(testConfig);
+      const fee = await facilitator.estimateFee!("upto");
+      expect(fee.degraded).toBe(true);
+      expect(BigInt(fee.microUsdc) > 0n).toBe(true);
+    });
+
+    it("verify() attaches settlementFee + feeDegraded to a valid result", async () => {
+      const facilitator = createFacilitator(testConfig);
+      const result = await facilitator.verify(mockPayload, mockRequirements);
+      expect(result.isValid).toBe(true);
+      if (result.isValid) {
+        expect(typeof result.settlementFee).toBe("string");
+        expect(BigInt(result.settlementFee!) > 0n).toBe(true);
+        expect(result.feeDegraded).toBe(true); // same fail-closed reasoning as above
+      }
+    });
+
+    it("verifyExact() attaches settlementFee + feeDegraded to a valid result", async () => {
+      const facilitator = createFacilitator(testConfig);
+      const result = await facilitator.verifyExact(mockPayload, mockExactRequirements);
+      expect(result.isValid).toBe(true);
+      if (result.isValid) {
+        expect(typeof result.settlementFee).toBe("string");
+        expect(result.feeDegraded).toBe(true);
+      }
+    });
+
+    it("schemes.upto.verify and schemes.exact.verify also attach fee fields (one definition, both call sites)", async () => {
+      const facilitator = createFacilitator(testConfig);
+      const uptoResult = await facilitator.schemes.upto.verify(mockPayload, mockRequirements);
+      const exactResult = await facilitator.schemes.exact.verify(mockPayload, mockExactRequirements);
+      expect(uptoResult.isValid && "settlementFee" in uptoResult).toBe(true);
+      expect(exactResult.isValid && "settlementFee" in exactResult).toBe(true);
+    });
+
+    it("a network mismatch is never enriched with a fee estimate (fails before fee computation)", async () => {
+      const facilitator = createFacilitator(testConfig);
+      const result = await facilitator.verify(mockPayload, { ...mockRequirements, network: "eip155:1" as const });
+      expect(result.isValid).toBe(false);
+      expect("settlementFee" in result).toBe(false);
+    });
+  });
+
   describe("RPC URL validation", () => {
     it("rejects RPC URL with non-http(s) protocol", () => {
       expect(() =>

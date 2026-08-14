@@ -30,4 +30,27 @@ describe("inferManifest", () => {
       expect(e.maxPrice).toBe(m.get(e.id));
     }
   });
+
+  describe("feeFloorMicro (workspace#45 — 402 ceiling headroom)", () => {
+    it("defaults to 0 — identical maxPrice to before workspace#45", () => {
+      const withDefault = inferManifest(params);
+      const withExplicitZero = inferManifest({ ...params, feeFloorMicro: "0" });
+      expect(withDefault.map((s) => s.payment.maxPrice)).toEqual(
+        withExplicitZero.map((s) => s.payment.maxPrice),
+      );
+    });
+
+    it("a large fee floor raises maxPrice on the cheapest (image) row", () => {
+      const noFloor = inferManifest(params).find((s) => s.id === "infer-image")!;
+      const withFloor = inferManifest({ ...params, feeFloorMicro: "5000" }).find(
+        (s) => s.id === "infer-image",
+      )!;
+      expect(withFloor.payment.maxPrice).not.toBe(noFloor.payment.maxPrice);
+      // Both entries() and manifest() must move together.
+      const entWithFloor = inferEntries({ ...params, feeFloorMicro: "5000" }).find(
+        (e) => e.id === "infer-image",
+      )!;
+      expect(entWithFloor.maxPrice).toBe(withFloor.payment.maxPrice);
+    });
+  });
 });

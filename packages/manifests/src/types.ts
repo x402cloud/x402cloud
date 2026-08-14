@@ -19,6 +19,14 @@ export type ManifestParams = {
   baseUrl: string;
   /** Optional override of the marketplace margin (basis points) per service */
   marginBps?: number;
+  /**
+   * Settlement-fee floor (USDC smallest units, decimal string) to bake into
+   * `maxPrice` so the 402 ceiling has headroom for it (workspace#45). Defaults
+   * to `"0"` — the current testnet deployment settles for free, so there is
+   * no floor to reserve room for. A mainnet deployment should pass the
+   * facilitator's current `/fee` quote here at manifest-build time.
+   */
+  feeFloorMicro?: string;
 };
 
 /**
