@@ -19,3 +19,22 @@ custom_domain = true
 # binding; use `wrangler dev --remote` (set in package.json `dev` script).
 [browser]
 binding = "BROWSER"
+
+# ── Mainnet environment (config only — not deployed by this change) ─────────
+# Per docs/MAINNET-RUNBOOK.md §5 step 2. The BROWSER binding above is not
+# redeclared — it is account-level and applies with no separate CLI step.
+# Per runbook §6: confirm Browser Rendering is upgraded off the free tier
+# (10 min/day, 3 concurrent) before pointing real traffic at this worker —
+# free tier will throttle production use.
+[env.mainnet]
+name = "x402cloud-scrape-mainnet"
+
+[env.mainnet.vars]
+NETWORK = "eip155:8453"
+FACILITATOR_URL = "https://facilitator-mainnet.x402cloud.ai"
+FACILITATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
+OPERATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
+
+[env.mainnet.route]
+pattern = "scrape-mainnet.x402cloud.ai"
+custom_domain = true

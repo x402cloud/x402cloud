@@ -51,3 +51,29 @@ max_retries = 5
 max_batch_size = 10
 max_batch_timeout = 5
 dead_letter_queue = "settle-retry-dlq"
+
+# ── Mainnet environment (config only — not deployed by this change) ─────────
+# Per docs/MAINNET-RUNBOOK.md §5 step 1. RPC_URL is a placeholder — paste the
+# operator's Alchemy/QuickNode Base mainnet URL before `wrangler deploy --env
+# mainnet` (never commit a real RPC URL with an embedded API key). Secrets
+# (FACILITATOR_PRIVATE_KEY, FACILITATOR_API_TOKEN) are set separately with
+# `wrangler secret put <NAME> --env mainnet` — see runbook §4.
+#
+# The Durable Object (SETTLEMENT_DO) and the settle-retry queues above are not
+# redeclared here, so this environment inherits them. The DO is fine — each
+# `[env.X]` deploys as its own Worker script, so its DO storage is separate
+# even with the same class name. The QUEUES are a real shared account
+# resource, so leaving this unredeclared means mainnet and testnet settle
+# retries land in the SAME "settle-retry" queue until this environment gets
+# its own (e.g. "settle-retry-mainnet") — an operator decision, not made here.
+[env.mainnet]
+name = "x402cloud-facilitator-mainnet"
+
+[env.mainnet.vars]
+NETWORK = "eip155:8453"
+OUR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
+RPC_URL = "<alchemy-or-quicknode-base-mainnet-url>"
+
+[env.mainnet.route]
+pattern = "facilitator-mainnet.x402cloud.ai"
+custom_domain = true

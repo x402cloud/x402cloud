@@ -20,6 +20,38 @@ this file is the scoreboard.
 | Chain-ID guard | facilitator rejects `requirements.network` ≠ configured network (`network_mismatch`) |
 | Mainnet deploy gate | `scripts/verify-mainnet-proxies.ts` — fail-closed ABI/bytecode verifier |
 
+### Mainnet config prep — RESOLVED 2026-08-14
+
+Three of the four gaps this line item tracked are config-only and now done
+(no deploy, no secrets, no real resource ids — verified by reading the repo,
+not by running anything against a live account):
+
+- **`[env.mainnet]` blocks** exist in all five `wrangler.toml`s that need
+  them (`facilitator-api`, `infer`, `sandbox`, `scrape`, `marketplace`),
+  matching the shape in [MAINNET-RUNBOOK.md](MAINNET-RUNBOOK.md) §5 — vars
+  swapped to mainnet values, worker name suffixed `-mainnet`, custom domain
+  `<app>-mainnet.x402cloud.ai`. `RPC_URL` in `facilitator-api` stays a
+  placeholder (no real key ever committed). `infer`'s mainnet `NETWORK` is
+  `"base"`, not `"eip155:8453"` — it resolves network through the friendly-name
+  map (`NETWORK_NAME_TO_CAIP2`), unlike the other four apps.
+- **`packages/probes/src/targets.ts`** already had a correct `mainnet` entry
+  (`facilitator: null, infer: null`, `network: "eip155:8453"`) predating this
+  change — the runbook §7 snippet showing real URLs filled in is the *future*
+  state once those services actually launch, not a current gap.
+- **DEPLOY.md** now documents the mainnet KV/R2 commands (infer SETTLEMENTS,
+  indexer CURSOR, indexer analytics bucket) that previously existed only in
+  the runbook — an operator following DEPLOY.md's own flow no longer has to
+  cross-reference a second document to find them.
+
+Still genuinely operator-only, none of it done here: logging into the right
+Cloudflare account (blocker 3 below), filling in a real mainnet `RPC_URL`,
+setting the mainnet secrets (`FACILITATOR_PRIVATE_KEY`,
+`FACILITATOR_API_TOKEN`), running the actual `wrangler kv namespace create` /
+`wrangler r2 bucket create` commands against the account (which mint real
+ids that then need pasting back into the relevant `wrangler.toml`), any
+`wrangler deploy --env mainnet`, and DNS. None of those can be done from a
+repo checkout.
+
 ## Verified blockers (in dependency order)
 
 ### 1. Proxy contracts on Base mainnet — RESOLVED 2026-06-10
@@ -120,7 +152,8 @@ Operator actions:
    deploy marketplace + KV namespace (blockers 4, 5) — *testnet stack
    complete, same day*.
 2. Publish npm packages (blocker 2) — *adoption channel open*.
-3. Execute MAINNET-RUNBOOK §4–§9 (secrets, env blocks, resources, deploy,
-   smoke test) — contracts already live, verifier already PASS — *real
-   USDC settlement*.
+3. Execute MAINNET-RUNBOOK §4–§9 (secrets, resources, deploy, smoke test) —
+   contracts already live, verifier already PASS, `[env.mainnet]` config
+   blocks already in every `wrangler.toml` (see "Mainnet config prep" above)
+   — *real USDC settlement*.
 4. Wire external alerting (blocker 6) before announcing.

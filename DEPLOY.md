@@ -42,8 +42,9 @@ pnpm -F facilitator-api exec wrangler deploy
 ```
 
 Vars (`NETWORK`, `OUR_ADDRESS`, `RPC_URL`) are baked into `wrangler.toml`.
-Switch to mainnet by editing `NETWORK = "eip155:8453"` and an appropriate
-`RPC_URL` before deploy.
+An `[env.mainnet]` block with these swapped to mainnet values already exists
+(see "Mainnet" below) — deploy it with `wrangler secret put ... --env mainnet`
+and `wrangler deploy --env mainnet`, after filling in a real `RPC_URL`.
 
 ### `infer`
 
@@ -83,6 +84,38 @@ Backfill historical settlements:
 ```bash
 pnpm -F indexer backfill -- --from-block <N> --to-block <M>
 ```
+
+### Mainnet
+
+Every Worker app above now carries an `[env.mainnet]` block in its
+`wrangler.toml` (config only — see [`docs/MAINNET-RUNBOOK.md`](docs/MAINNET-RUNBOOK.md)
+for the full sequenced operator runbook). Before deploying any of them to
+mainnet, create the environment-specific KV/R2 resources they need — these
+are separate resources from the testnet ones above, not upgrades of them:
+
+```bash
+# infer: settlement-reconciliation KV (optional — infer works without it,
+# see the commented block in apps/infer/wrangler.toml).
+CLOUDFLARE_ACCOUNT_ID=331224f43e4f448483cad2f1185ea965 \
+  npx wrangler kv namespace create SETTLEMENTS --env mainnet
+# copy the returned id into apps/infer/wrangler.toml under
+# [[env.mainnet.kv_namespaces]] and uncomment that block
+
+# indexer: mainnet cursor KV (do not reuse the testnet CURSOR id — a
+# mainnet backfill starts its own cursor)
+pnpm -F indexer exec wrangler kv namespace create CURSOR --env mainnet
+# copy the returned id into apps/indexer/wrangler.toml's [env.mainnet]
+# (this repo's indexer wrangler.toml has no [env.mainnet] block yet —
+# add one alongside the id, mirroring the top-level [[kv_namespaces]] shape)
+
+# indexer: mainnet analytics bucket (separate from the testnet bucket —
+# different chain, different data)
+pnpm -F indexer exec wrangler r2 bucket create x402-analytics-mainnet
+```
+
+See [`docs/MAINNET-RUNBOOK.md`](docs/MAINNET-RUNBOOK.md) §6 for the full
+resource-bindings list (including the sandbox container/DO and the scrape
+Browser Rendering paid-tier note) and §5 for deploy order.
 
 ---
 

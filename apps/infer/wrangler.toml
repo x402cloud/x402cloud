@@ -29,3 +29,29 @@ FACILITATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
 [route]
 pattern = "infer.x402cloud.ai"
 custom_domain = true
+
+# ── Mainnet environment (config only — not deployed by this change) ─────────
+# Per docs/MAINNET-RUNBOOK.md §5 step 2. NOTE: unlike facilitator-api/sandbox/
+# scrape/marketplace, this app resolves NETWORK through NETWORK_NAME_TO_CAIP2
+# (see packages/evm/src/constants.ts, pinned by apps/infer/test/routes.test.ts)
+# — it takes the FRIENDLY name ("base-sepolia" today), not the raw CAIP-2
+# string, so the mainnet value is "base", not "eip155:8453".
+[env.mainnet]
+name = "infer-x402cloud-mainnet"
+
+[env.mainnet.vars]
+NETWORK = "base"
+FACILITATOR_URL = "https://facilitator-mainnet.x402cloud.ai"
+FACILITATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
+
+[env.mainnet.route]
+pattern = "infer-mainnet.x402cloud.ai"
+custom_domain = true
+
+# Durable settlement recording for mainnet — same shape as the top-level
+# comment above, its own namespace (do not reuse the testnet SETTLEMENTS id):
+#   CLOUDFLARE_ACCOUNT_ID=331224f43e4f448483cad2f1185ea965 \
+#     npx wrangler kv namespace create SETTLEMENTS --env mainnet
+# [[env.mainnet.kv_namespaces]]
+# binding = "SETTLEMENTS"
+# id = "<paste id from the command above>"
