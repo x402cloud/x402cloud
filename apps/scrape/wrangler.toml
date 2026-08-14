@@ -21,11 +21,15 @@ custom_domain = true
 binding = "BROWSER"
 
 # ── Mainnet environment (config only — not deployed by this change) ─────────
-# Per docs/MAINNET-RUNBOOK.md §5 step 2. The BROWSER binding above is not
-# redeclared — it is account-level and applies with no separate CLI step.
-# Per runbook §6: confirm Browser Rendering is upgraded off the free tier
-# (10 min/day, 3 concurrent) before pointing real traffic at this worker —
-# free tier will throttle production use.
+# Per docs/MAINNET-RUNBOOK.md §5 step 2. Browser Rendering itself is
+# account-level and needs no separate CLI provisioning step — but per review
+# finding radekdymacz/workspace#44, named environments do not inherit
+# BINDINGS from the top level, so the [browser] binding above is redeclared
+# below; without it this environment would deploy with vars but no BROWSER
+# binding and every scrape call would throw at runtime. Per runbook §6:
+# confirm Browser Rendering is upgraded off the free tier (10 min/day, 3
+# concurrent) before pointing real traffic at this worker — free tier will
+# throttle production use.
 [env.mainnet]
 name = "x402cloud-scrape-mainnet"
 
@@ -38,3 +42,6 @@ OPERATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
 [env.mainnet.route]
 pattern = "scrape-mainnet.x402cloud.ai"
 custom_domain = true
+
+[env.mainnet.browser]
+binding = "BROWSER"

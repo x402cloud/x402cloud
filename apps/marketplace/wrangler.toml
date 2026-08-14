@@ -16,6 +16,11 @@ custom_domain = true
 # URLs and networks it advertises) is separate from this wrangler.toml — see
 # packages/manifests — and still needs its own mainnet entries wired in before
 # this environment is meaningful; that is not part of this change.
+#
+# Checked against review finding radekdymacz/workspace#44 (named environments
+# don't inherit bindings): this app declares no durable_objects/queues/ai/
+# browser/containers bindings at the top level, so there is nothing else to
+# redeclare here — vars + route are the whole contract.
 [env.mainnet]
 name = "x402cloud-marketplace-mainnet"
 

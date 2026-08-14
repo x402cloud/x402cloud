@@ -125,6 +125,28 @@ green.
    custom_domain = true
    ```
 
+   **Named environments do not inherit bindings from the top level** — the
+   `vars`/`route` block above is not the whole contract for `infer`,
+   `sandbox` and `scrape`. Redeclare whatever other bindings the app's
+   top-level config already has, under `[env.mainnet.<binding>]` /
+   `[[env.mainnet.<binding>]]`, or the mainnet worker deploys with no way to
+   reach them at runtime:
+
+   - `infer` also needs `[env.mainnet.ai]` with `binding = "AI"` (mirrors
+     the top-level `[ai]` block).
+   - `sandbox` also needs `[[env.mainnet.containers]]` (same
+     `class_name`/`image`/`instance_type`/`max_instances` as the top-level
+     block), `[[env.mainnet.durable_objects.bindings]]` for the `Sandbox`
+     class, and `[[env.mainnet.migrations]]` with `tag = "v1"` and
+     `new_sqlite_classes = ["Sandbox"]`.
+   - `scrape` also needs `[env.mainnet.browser]` with `binding = "BROWSER"`
+     (mirrors the top-level `[browser]` block).
+   - `facilitator-api` (step 1, above) needs its own
+     `[[env.mainnet.durable_objects.bindings]]` for `SettlementDO`, its own
+     `[[env.mainnet.migrations]]`, and its own settle-retry queue bindings
+     under a mainnet-suffixed queue name (e.g. `settle-retry-mainnet` /
+     `settle-retry-mainnet-dlq`) rather than sharing testnet's `settle-retry`.
+
    Then `wrangler deploy --env mainnet` per app.
 
 3. **Deploy `marketplace`** last, with mainnet env pointing at the
