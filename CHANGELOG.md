@@ -62,6 +62,17 @@ they are versioned together until a package needs to diverge.
   frame-deny, no-referrer).
 
 ### Added
+- `@x402cloud/probes`: `usdcBalance` probe (operator/revenue address USDC
+  balance) and `summarizeSettlements(kv)` (24h settled/failed/pending
+  rollup of a `SETTLEMENTS` KV namespace, degrading to `{ available:
+  false }` when no KV is bound). `resolveFacilitatorAddress` extracted as
+  the one shared facilitator-address lookup (`gasEstimate` and
+  `usdcBalance` both use it).
+- `apps/status`: mobile-first ops dashboard — wallet tiles for facilitator
+  ETH gas and operator USDC, a settlement-health tile, and a 15-minute
+  cron that POSTs a plain-text alert to `ALERT_WEBHOOK_URL` on low gas,
+  any failing probe, or a settlement-failure spike. `/status` and `/` keep
+  their existing JSON/route shape (`settlements` is an additive field).
 - `@x402cloud/middleware`: `redactSignature(intent)` helper for safely
   forwarding `SettlementIntent` to logs / queues.
 - `@x402cloud/middleware`: optional `onSettlementError(err, intent)` callback
