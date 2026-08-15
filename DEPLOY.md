@@ -57,12 +57,30 @@ pnpm -F infer exec wrangler deploy
 ### `status`
 
 Public dashboard; can take optional private RPC URLs to avoid public-RPC
-rate limits.
+rate limits. Also runs a 15-minute cron (`[triggers]` in `wrangler.toml`)
+that re-checks everything and POSTs a plain-text alert to a webhook (an
+ntfy.sh-style topic URL) when the facilitator's ETH balance is low, any
+probe fails, or settlements show a failure spike — a no-op with no webhook
+secret set.
 
 ```bash
-pnpm -F status exec wrangler secret put TESTNET_RPC_URL    # optional
-pnpm -F status exec wrangler secret put MAINNET_RPC_URL # optional
+pnpm -F status exec wrangler secret put TESTNET_RPC_URL      # optional
+pnpm -F status exec wrangler secret put MAINNET_RPC_URL      # optional
+pnpm -F status exec wrangler secret put OPERATOR_ADDRESS      # optional override for the USDC-balance probe
+pnpm -F status exec wrangler secret put ALERT_WEBHOOK_URL     # optional — enables the cron alert POST
 pnpm -F status exec wrangler deploy
+```
+
+Settlement health (last-24h settled/failed/pending) reads the same
+`SETTLEMENTS` KV namespace `apps/infer` writes to — read-only (`list`/`get`
+only, no `put`). It shows "not available" until the binding exists. One-time
+setup, after `apps/infer`'s own `SETTLEMENTS` namespace exists (see its
+`wrangler.toml`):
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=331224f43e4f448483cad2f1185ea965 \
+  npx wrangler kv namespace create SETTLEMENTS   # skip if apps/infer already created one — reuse its id
+# paste the id into the commented [[kv_namespaces]] block in apps/status/wrangler.toml, uncomment, redeploy
 ```
 
 ### `indexer`
@@ -156,6 +174,8 @@ goldsky pipeline apply apps/x402-indexer/pipeline.yaml
 | `facilitator-docker` | `FACILITATOR_PRIVATE_KEY`, `RPC_URL`, optional `FACILITATOR_API_TOKEN` | Same |
 | `indexer` | `BASE_RPC_URL`, `BASE_SEPOLIA_RPC_URL` | Optional private RPCs |
 | `status` | `TESTNET_RPC_URL`, `MAINNET_RPC_URL` | Optional private RPCs |
+| `status` | `OPERATOR_ADDRESS` | Optional override for the USDC-balance probe |
+| `status` | `ALERT_WEBHOOK_URL` | Optional — cron alert POST target (ntfy.sh-style) |
 | `acp-seller` | `CF_ACCOUNT_ID`, `CF_API_TOKEN` | CF Workers AI |
 
 `.env` files are gitignored. Never commit private keys; use

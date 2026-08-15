@@ -5,6 +5,7 @@ import { facilitatorHealth } from "./facilitator.js";
 import { inferHealth, inferModels } from "./infer.js";
 import { paymentFlow } from "./payment-flow.js";
 import { gasEstimate } from "./gas.js";
+import { usdcBalance } from "./usdc-balance.js";
 
 export const allProbes = [
   rpcAlive,
@@ -15,6 +16,7 @@ export const allProbes = [
   inferModels,
   paymentFlow,
   gasEstimate,
+  usdcBalance,
 ];
 
 export {
@@ -26,4 +28,5 @@ export {
   inferModels,
   paymentFlow,
   gasEstimate,
+  usdcBalance,
 };
