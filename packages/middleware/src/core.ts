@@ -32,6 +32,33 @@ export type SettleFn = (
 ) => Promise<SettleResponse>;
 
 /**
+ * Clamp a metered amount to the price the 402 quoted.
+ *
+ * The quote is a CEILING, not a suggestion. Every layer below this one clamps
+ * to `permitted.amount` — the payer's signed budget — which for an agent wallet
+ * is routinely orders of magnitude above one call's quote. If a meter returns
+ * more than we quoted, that is our bug, and the payer should not fund it.
+ *
+ * Clamping (rather than refusing to settle) is deliberate: the response has
+ * already been delivered, so refusing would hand out the service for free. The
+ * overrun is logged loudly because a meter that exceeds its own route's
+ * `maxPrice` is a pricing bug that needs fixing, not a normal condition.
+ */
+export function clampToQuote(metered: string, quoted: string): string {
+  if (!/^\d+$/.test(metered)) {
+    console.error(`x402 upto meter returned a non-integer amount "${metered}" — charging 0`);
+    return "0";
+  }
+  if (BigInt(metered) > BigInt(quoted)) {
+    console.error(
+      `x402 upto meter returned ${metered} but the 402 quoted ${quoted} — clamping to the quote`,
+    );
+    return quoted;
+  }
+  return metered;
+}
+
+/**
  * Build the upto payment strategy from verify/settle functions.
  * `facilitator` is the settlement wallet address advertised in the 402
  * response (`extra.facilitator`) — the canonical upto witness binds it.
@@ -41,7 +68,8 @@ function uptoStrategy(verify: VerifyFn, settle: SettleFn, facilitator: `0x${stri
     scheme: "upto",
     getPrice: (routeConfig) => parseUsdcAmount(routeConfig.maxPrice),
     castPayload: (decoded) => parseUptoPayload(decoded),
-    buildPaymentRequired: (routeConfig, resourceUrl) => buildPaymentRequired(routeConfig, resourceUrl, facilitator),
+    buildPaymentRequired: (routeConfig, resourceUrl, error) =>
+      buildPaymentRequired(routeConfig, resourceUrl, facilitator, error),
     // Verify against the same facilitator we advertise — the canonical upto
     // witness binds it, so requirements.extra must carry it for verification.
     requirementsExtra: { facilitator },
@@ -52,13 +80,14 @@ function uptoStrategy(verify: VerifyFn, settle: SettleFn, facilitator: `0x${stri
           return null;
         }
 
-        // Meter actual usage
-        const consumedAmount = await routeConfig.meter({
+        // Meter actual usage, then hold it to the price we quoted in the 402.
+        const metered = await routeConfig.meter({
           request,
           response,
           authorizedAmount: payload.permit2Authorization.permitted.amount,
           payer: verification.payer,
         });
+        const consumedAmount = clampToQuote(metered, requirements.amount);
 
         // One settlement intent: its id ties the pre-fire record to the
         // post-resolve outcome, and it carries the payload for onSettlementError.

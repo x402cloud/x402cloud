@@ -14,7 +14,7 @@ function makeRequirements(): PaymentRequirements {
     scheme: "exact",
     network: "eip155:8453",
     asset: TOKEN,
-    maxAmount: "100000",
+    amount: "100000",
     payTo: PAY_TO,
     maxTimeoutSeconds: 300,
   };
@@ -172,5 +172,22 @@ describe("settleExact", () => {
     }
     expect(signer.signSettlementTx).toHaveBeenCalledTimes(1);
     expect(signer.sendRawSettlementTx).toHaveBeenCalledTimes(1);
+  });
+
+  // SECURITY: exact transfers the full authorization, so settling one that is
+  // bigger than the quote would charge the payer more than the 402 asked for.
+  // Independent of `verifyExact` — a remote facilitator does not get to assume
+  // its caller verified anything.
+  it("refuses to settle an authorization larger than the quoted price", async () => {
+    const signer = makeSigner();
+    const requirements = { ...makeRequirements(), amount: "10000" };
+
+    const result = await settleExact(signer, makePayload(), requirements);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errorReason).toBe("authorization_not_exact");
+    }
+    expect(signer.signSettlementTx).not.toHaveBeenCalled();
   });
 });

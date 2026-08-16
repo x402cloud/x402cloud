@@ -4,28 +4,9 @@ import { buildUptoMiddleware, type VerifyFn, type SettleFn } from "../src/core.j
 import type { UptoRoutesConfig } from "../src/types.js";
 import type { UptoPayload } from "@x402cloud/evm";
 
-// Mock @x402cloud/protocol
-vi.mock("@x402cloud/protocol", () => ({
-  extractPaymentHeader: vi.fn((req: Request) =>
-    req.headers.get("PAYMENT-SIGNATURE") ?? req.headers.get("X-PAYMENT") ?? null,
-  ),
-  decodePaymentHeader: vi.fn((header: string) => {
-    try {
-      return JSON.parse(atob(header));
-    } catch {
-      throw new Error("Invalid payment header");
-    }
-  }),
-  parseUsdcAmount: vi.fn((price: string) => {
-    const cleaned = price.replace(/[$,\s]/g, "");
-    if (!/^\d+(\.\d+)?$/.test(cleaned)) throw new Error(`Invalid USDC amount: "${price}"`);
-    const [intPart, fracPart = ""] = cleaned.split(".");
-    const padded = fracPart.padEnd(6, "0").slice(0, 6);
-    return (intPart + padded).replace(/^0+/, "") || "0";
-  }),
-  encodeRequirementsHeader: vi.fn((required: unknown) => btoa(JSON.stringify(required))),
-}));
 
+// @x402cloud/protocol is NOT mocked: it is zero-dependency and pure, so a
+// hand-written stand-in would only reimplement the thing it stands in for.
 // Mock @x402cloud/evm
 vi.mock("@x402cloud/evm", async () => {
   const actual = await import("@x402cloud/evm");

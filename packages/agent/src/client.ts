@@ -1,5 +1,5 @@
 import { wrapFetchWithPayment } from "@x402cloud/client";
-import type { MarketplaceService } from "@x402cloud/protocol";
+import { parseUsdcAmount, type MarketplaceService } from "@x402cloud/protocol";
 import { fetchCatalog, fetchService } from "./catalog.js";
 import {
   createInMemoryBudgetTracker,
@@ -37,12 +37,27 @@ export function createAgentClient(opts: AgentClientOptions): AgentClient {
   const fetchImpl = opts.fetch ?? globalThis.fetch;
   // Caller-supplied tracker wins. Falls back to in-memory if `budget` is set.
   const tracker = opts.tracker ?? createInMemoryBudgetTracker(opts.budget);
-  const payingFetch = wrapFetchWithPayment({ signer: opts.signer });
 
   async function getService(id: string): Promise<MarketplaceService> {
     const svc = await fetchService(catalogUrl, id, fetchImpl);
     if (!svc) throw new ServiceNotFoundError(id);
     return svc;
+  }
+
+  /**
+   * A paying fetch bound to ONE service's catalog price.
+   *
+   * The budget check below runs against `svc.payment.maxPrice`, so that has to
+   * be the same ceiling the signature respects — otherwise we check a catalog
+   * number and sign whatever the 402 happens to say. Passing it as `maxValue`
+   * closes that gap: an endpoint quoting above its catalog price gets
+   * `PriceExceedsMaxValueError` instead of a signature.
+   */
+  function payingFetchFor(svc: MarketplaceService): typeof fetch {
+    return wrapFetchWithPayment({
+      signer: opts.signer,
+      maxValue: parseUsdcAmount(svc.payment.maxPrice),
+    });
   }
 
   return {
@@ -51,19 +66,22 @@ export function createAgentClient(opts: AgentClientOptions): AgentClient {
     getService,
 
     async fetchFor(id) {
-      // Resolve the service once so callers fail fast on unknown ids.
-      await getService(id);
-      return payingFetch;
+      // Resolve the service once so callers fail fast on unknown ids — and so
+      // the returned fetch is bound to that service's price ceiling.
+      const svc = await getService(id);
+      return payingFetchFor(svc);
     },
 
     async call<T = unknown>(id: string, body?: unknown): Promise<T> {
       const svc = await getService(id);
-      // Pre-flight check uses maxPrice (worst case). The actual recorded
-      // amount comes from `X-Payment-Settled` after the call succeeds.
+      // Pre-flight check uses maxPrice (worst case), and `payingFetchFor` binds
+      // the same number as the signing ceiling, so the price checked here is
+      // the price that gets signed. The actual recorded amount comes from
+      // `X-Payment-Settled` after the call succeeds.
       const maxUsd = parsePriceUsd(svc.payment.maxPrice);
       tracker.check(id, maxUsd);
 
-      const res = await payingFetch(svc.endpoint.url, {
+      const res = await payingFetchFor(svc)(svc.endpoint.url, {
         method: svc.endpoint.method,
         headers: { "content-type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body),

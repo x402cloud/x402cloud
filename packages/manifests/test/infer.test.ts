@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { inferManifest, inferEntries } from "../src/index.js";
+import {
+  inferManifest,
+  inferEntries,
+  wholesaleTextCost,
+  wholesaleEmbedCost,
+  QUOTE_INPUT_TOKENS,
+  QUOTE_OUTPUT_TOKENS,
+  QUOTE_EMBED_TOKENS,
+} from "../src/index.js";
 import type { ManifestParams } from "../src/index.js";
 
 const params: ManifestParams = {
@@ -29,5 +37,49 @@ describe("inferManifest", () => {
     for (const e of ent) {
       expect(e.maxPrice).toBe(m.get(e.id));
     }
+  });
+
+  it("never quotes $0 — a priceless route is a free route", () => {
+    for (const s of inferManifest(params)) {
+      expect(Number(s.payment.maxPrice.replace(/[$,\s]/g, ""))).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("sub-micro work still costs something", () => {
+  // A single-token `nano` request used to meter to exactly 0 micro-USDC, and a
+  // zero settlement skips the on-chain transfer entirely — the request was
+  // served for free. Truncation is fine; truncation to nothing is not.
+  it("floors non-zero text work at 1 micro-USDC", () => {
+    const neurons = { inputPerMillion: 1, outputPerMillion: 1 };
+
+    expect(wholesaleTextCost(neurons, 1, 0)).toBe("1");
+    expect(wholesaleTextCost(neurons, 0, 1)).toBe("1");
+  });
+
+  it("floors non-zero embedding work at 1 micro-USDC", () => {
+    expect(wholesaleEmbedCost({ inputPerMillion: 1, outputPerMillion: 0 }, 1)).toBe("1");
+  });
+
+  it("still charges nothing when no work was done", () => {
+    const neurons = { inputPerMillion: 10_000, outputPerMillion: 50_000 };
+
+    expect(wholesaleTextCost(neurons, 0, 0)).toBe("0");
+    expect(wholesaleEmbedCost(neurons, 0)).toBe("0");
+  });
+
+  it("leaves amounts above 1 micro-USDC exactly as computed", () => {
+    const neurons = { inputPerMillion: 1_075, outputPerMillion: 0 };
+
+    expect(wholesaleEmbedCost(neurons, 8192)).toBe("96");
+  });
+});
+
+describe("quote assumptions", () => {
+  // apps/infer caps `max_tokens` against these same constants. If the cap and
+  // the quote read different numbers, the service invites a request its own
+  // price never covered.
+  it("are the numbers the quote is actually built from", () => {
+    expect([QUOTE_INPUT_TOKENS, QUOTE_OUTPUT_TOKENS, QUOTE_EMBED_TOKENS]).toEqual([500, 2000, 8192]);
   });
 });

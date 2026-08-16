@@ -7,6 +7,24 @@ import {
 import { createUptoPayload, createExactPayload } from "@x402cloud/evm";
 import type { PaymentClientConfig, SchemeHandler } from "./types.js";
 
+/**
+ * Thrown when a 402 quotes more than the caller's `maxValue`. Carries both
+ * numbers (smallest units) so a caller can report what it refused.
+ */
+export class PriceExceedsMaxValueError extends Error {
+  constructor(
+    public readonly quoted: string,
+    public readonly maxValue: string,
+    public readonly resourceUrl?: string,
+  ) {
+    super(
+      `x402 offer quotes ${quoted} but maxValue is ${maxValue}` +
+        (resourceUrl ? ` (${resourceUrl})` : ""),
+    );
+    this.name = "PriceExceedsMaxValueError";
+  }
+}
+
 const defaultSchemeHandlers: Record<string, SchemeHandler> = {
   upto: (signer, requirements) =>
     createUptoPayload(signer, requirements) as Promise<Record<string, unknown>>,
@@ -25,7 +43,7 @@ const defaultSchemeHandlers: Record<string, SchemeHandler> = {
 export function wrapFetchWithPayment(
   config: PaymentClientConfig,
 ): typeof fetch {
-  const { signer, maxRetries = 1 } = config;
+  const { signer, maxRetries = 1, maxValue } = config;
   const schemes: Record<string, SchemeHandler> = {
     ...defaultSchemeHandlers,
     ...config.schemeHandlers,
@@ -52,10 +70,23 @@ export function wrapFetchWithPayment(
         break; // No payment options available
       }
 
-      // Pick the first accepted payment method. Normalizing here means an offer
-      // from a spec-conformant server (which writes `amount`, not `maxAmount`)
-      // signs correctly instead of throwing on an undefined price.
+      // Pick the first accepted payment method. Parsing here is what decides
+      // WHICH number we sign — the offer came from a remote server, so a
+      // payload whose two price spellings disagree is rejected rather than
+      // resolved in the server's favour.
       const requirements = normalizeRequirements(paymentRequired.accepts[0]);
+
+      // The price we are about to sign, checked against the caller's ceiling
+      // BEFORE signing. This is the same number `requirements.amount` puts in
+      // the Permit2 authorization, so there is no gap between what was checked
+      // and what is signed.
+      if (maxValue !== undefined && BigInt(requirements.amount) > BigInt(maxValue)) {
+        throw new PriceExceedsMaxValueError(
+          requirements.amount,
+          maxValue,
+          paymentRequired.resource?.url,
+        );
+      }
 
       // Sign payment based on scheme
       const handler = schemes[requirements.scheme];

@@ -3,42 +3,57 @@ import { parseUsdcAmount } from "@x402cloud/protocol";
 import { DEFAULT_USDC_ADDRESSES } from "@x402cloud/evm";
 import type { UptoRouteConfig, ExactRouteConfig } from "./types.js";
 
+/** Everything a `PaymentRequirements` needs, before defaults are applied. */
+export type RequirementsSpec = {
+  scheme: "upto" | "exact";
+  network: Network;
+  /** Price in the asset's smallest units — already parsed, not a "$0.01" string. */
+  amount: string;
+  payTo: string;
+  asset?: string;
+  maxTimeoutSeconds?: number;
+  extra?: Record<string, unknown>;
+};
+
 /**
- * Shared helper: build a 402 PaymentRequired response from scheme, network, price, and route metadata.
- * Captures the common structure — upto and exact differ only in scheme and which field holds the price.
+ * THE constructor for `PaymentRequirements`. One concept, one place: the 402 we
+ * advertise and the requirements we verify against are built by this function,
+ * so they cannot drift apart and a new spec field is one edit, not two.
+ *
+ * Throws when the network has no default asset and none was given — a route
+ * that cannot name its token is a misconfiguration, not a runtime condition.
  */
-function buildPaymentRequiredResponse(
-  scheme: "upto" | "exact",
-  network: Network,
-  priceString: string,
-  payTo: string,
-  resourceUrl: string,
-  asset: string | undefined,
-  maxTimeoutSeconds: number | undefined,
-  description: string | undefined,
-  extra?: Record<string, unknown>,
-): PaymentRequired {
-  const resolvedAsset = asset ?? DEFAULT_USDC_ADDRESSES[network];
-  if (!resolvedAsset) {
-    throw new Error(`No USDC address for network ${network}. Provide asset explicitly.`);
+export function buildRequirements(spec: RequirementsSpec): PaymentRequirements {
+  const asset = spec.asset ?? DEFAULT_USDC_ADDRESSES[spec.network];
+  if (!asset) {
+    throw new Error(`No USDC address for network ${spec.network}. Provide asset explicitly.`);
   }
 
-  // Both spellings of the price go on the wire: `amount` is what the x402 v2
-  // spec names it (so stock clients — @x402/fetch, Cloudflare agents — can read
-  // the offer), `maxAmount` is what our own client and EVM package have always
-  // read. Same value, so there is nothing to disagree about.
-  const amount = parseUsdcAmount(priceString);
-  const requirements: PaymentRequirements = {
-    scheme,
-    network,
-    asset: resolvedAsset,
-    amount,
-    maxAmount: amount,
-    payTo,
-    maxTimeoutSeconds: maxTimeoutSeconds ?? 300,
-    ...(extra ? { extra } : {}),
+  return {
+    scheme: spec.scheme,
+    network: spec.network,
+    asset,
+    amount: spec.amount,
+    payTo: spec.payTo,
+    maxTimeoutSeconds: spec.maxTimeoutSeconds ?? 300,
+    ...(spec.extra ? { extra: spec.extra } : {}),
   };
+}
 
+/**
+ * Shared helper: build a 402 PaymentRequired envelope around one offer.
+ *
+ * `error` is the spec's optional human-readable reason. It is a PARAMETER, not
+ * a constant: this builder is public API and has no idea why the caller is
+ * returning a 402 — "no header" and "verification failed" are different facts
+ * and each call site knows which one it holds.
+ */
+function buildPaymentRequiredResponse(
+  spec: RequirementsSpec,
+  resourceUrl: string,
+  description: string | undefined,
+  error: string | undefined,
+): PaymentRequired {
   const resource: ResourceInfo = {
     url: resourceUrl,
     description,
@@ -46,9 +61,9 @@ function buildPaymentRequiredResponse(
 
   return {
     x402Version: 2,
-    error: "PAYMENT-SIGNATURE header is required",
+    ...(error ? { error } : {}),
     resource,
-    accepts: [requirements],
+    accepts: [buildRequirements(spec)],
   };
 }
 
@@ -58,22 +73,29 @@ function buildPaymentRequiredResponse(
  * `facilitator` is the settlement wallet address, advertised as
  * `extra.facilitator`: the canonical upto proxy witness binds the one address
  * allowed to settle, so clients need it at signing time.
+ *
+ * `error` is optional and omitted when not supplied — pass the reason this
+ * particular 402 is being returned.
  */
 export function buildPaymentRequired(
   routeConfig: UptoRouteConfig,
   resourceUrl: string,
   facilitator: `0x${string}`,
+  error?: string,
 ): PaymentRequired {
   return buildPaymentRequiredResponse(
-    "upto",
-    routeConfig.network,
-    routeConfig.maxPrice,
-    routeConfig.payTo,
+    {
+      scheme: "upto",
+      network: routeConfig.network,
+      amount: parseUsdcAmount(routeConfig.maxPrice),
+      payTo: routeConfig.payTo,
+      asset: routeConfig.asset,
+      maxTimeoutSeconds: routeConfig.maxTimeoutSeconds,
+      extra: { facilitator },
+    },
     resourceUrl,
-    routeConfig.asset,
-    routeConfig.maxTimeoutSeconds,
     routeConfig.description,
-    { facilitator },
+    error,
   );
 }
 
@@ -81,15 +103,19 @@ export function buildPaymentRequired(
 export function buildExactPaymentRequired(
   routeConfig: ExactRouteConfig,
   resourceUrl: string,
+  error?: string,
 ): PaymentRequired {
   return buildPaymentRequiredResponse(
-    "exact",
-    routeConfig.network,
-    routeConfig.price,
-    routeConfig.payTo,
+    {
+      scheme: "exact",
+      network: routeConfig.network,
+      amount: parseUsdcAmount(routeConfig.price),
+      payTo: routeConfig.payTo,
+      asset: routeConfig.asset,
+      maxTimeoutSeconds: routeConfig.maxTimeoutSeconds,
+    },
     resourceUrl,
-    routeConfig.asset,
-    routeConfig.maxTimeoutSeconds,
     routeConfig.description,
+    error,
   );
 }

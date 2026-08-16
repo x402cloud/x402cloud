@@ -128,6 +128,50 @@ describe("createAgentClient.call", () => {
     globalThis.fetch = originalFetch;
   });
 
+  // SECURITY: the budget check reads `svc.payment.maxPrice` from the catalog,
+  // but the signature is made against whatever the endpoint's 402 says. If the
+  // two are not the same number, the check was theatre.
+  it("refuses to sign a 402 quoting more than the catalog price it checked", async () => {
+    const catalogFetch = vi.fn(async () => jsonResponse(svc));
+    const originalFetch = globalThis.fetch;
+
+    // Endpoint quotes $1.00 — a hundred times the catalog's $0.01.
+    const offer = {
+      x402Version: 2,
+      resource: { url: svc.endpoint.url },
+      accepts: [
+        {
+          scheme: "upto",
+          network: "eip155:84532",
+          asset: "0xUSDC",
+          amount: "1000000",
+          payTo: "0xPAY",
+          maxTimeoutSeconds: 300,
+        },
+      ],
+    };
+    const upstream = vi.fn(async () =>
+      new Response(null, {
+        status: 402,
+        headers: { "PAYMENT-REQUIRED": btoa(JSON.stringify(offer)) },
+      }),
+    );
+    globalThis.fetch = upstream as unknown as typeof fetch;
+
+    const agent = createAgentClient({
+      signer: mockSigner,
+      catalogUrl: CATALOG_URL,
+      fetch: catalogFetch,
+    });
+
+    await expect(agent.call("infer-fast", {})).rejects.toThrow(/maxValue/);
+    // The 402 was fetched once; no signed retry followed.
+    expect(upstream).toHaveBeenCalledTimes(1);
+    expect(mockSigner.signTypedData).not.toHaveBeenCalled();
+
+    globalThis.fetch = originalFetch;
+  });
+
   it("throws ServiceNotFoundError on unknown id", async () => {
     const catalogFetch = vi.fn(async () => new Response("x", { status: 404 }));
     const agent = createAgentClient({

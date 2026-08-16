@@ -7,6 +7,8 @@ import {
   extractPaymentHeader,
   parseUsdcAmount,
   formatUsdcAmount,
+  toWireRequirements,
+  toWirePaymentRequired,
 } from "../src/headers.js";
 import type { PaymentPayload, PaymentRequired } from "../src/types.js";
 
@@ -17,7 +19,7 @@ const samplePayload: PaymentPayload = {
     scheme: "upto",
     network: "eip155:8453",
     asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    maxAmount: "100000",
+    amount: "100000",
     payTo: "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88",
     maxTimeoutSeconds: 300,
   },
@@ -35,7 +37,7 @@ const sampleRequirements: PaymentRequired = {
       scheme: "upto",
       network: "eip155:8453",
       asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-      maxAmount: "100000",
+      amount: "100000",
       payTo: "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88",
       maxTimeoutSeconds: 300,
     },
@@ -46,7 +48,15 @@ describe("encodePaymentHeader / decodePaymentHeader", () => {
   it("roundtrips a PaymentPayload", () => {
     const encoded = encodePaymentHeader(samplePayload);
     const decoded = decodePaymentHeader(encoded);
-    expect(decoded).toEqual(samplePayload);
+    expect(decoded).toMatchObject(samplePayload);
+  });
+
+  it("adds the legacy `maxAmount` mirror to the accepted offer", () => {
+    const decoded = decodePaymentHeader(encodePaymentHeader(samplePayload)) as PaymentPayload & {
+      accepted: { maxAmount?: string };
+    };
+    expect(decoded.accepted.amount).toBe("100000");
+    expect(decoded.accepted.maxAmount).toBe("100000");
   });
 });
 
@@ -54,7 +64,35 @@ describe("encodeRequirementsHeader / decodeRequirementsHeader", () => {
   it("roundtrips a PaymentRequired", () => {
     const encoded = encodeRequirementsHeader(sampleRequirements);
     const decoded = decodeRequirementsHeader(encoded);
-    expect(decoded).toEqual(sampleRequirements);
+    expect(decoded).toMatchObject(sampleRequirements);
+  });
+
+  // The published claim is that a stock x402 client can pay an offer we emit,
+  // and a client pinned to this implementation's original spelling still can.
+  // Both spellings on the wire is what makes both true.
+  it("emits both price spellings on the wire, same value", () => {
+    const decoded = decodeRequirementsHeader(encodeRequirementsHeader(sampleRequirements));
+    const offer = decoded.accepts[0] as (typeof decoded.accepts)[0] & { maxAmount?: string };
+
+    expect(offer.amount).toBe("100000");
+    expect(offer.maxAmount).toBe("100000");
+  });
+});
+
+describe("toWireRequirements / toWirePaymentRequired", () => {
+  it("does not mutate the canonical value it was given", () => {
+    const canonical = sampleRequirements.accepts[0];
+    toWireRequirements(canonical);
+    expect(canonical).not.toHaveProperty("maxAmount");
+  });
+
+  it("mirrors every offer in the envelope", () => {
+    const wire = toWirePaymentRequired({
+      ...sampleRequirements,
+      accepts: [sampleRequirements.accepts[0], { ...sampleRequirements.accepts[0], amount: "1" }],
+    });
+    const amounts = wire.accepts.map((a) => (a as { maxAmount?: string }).maxAmount);
+    expect(amounts).toEqual(["100000", "1"]);
   });
 });
 

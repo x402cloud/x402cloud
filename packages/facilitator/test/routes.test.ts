@@ -29,14 +29,14 @@ const mockRequirements = {
   scheme: "upto",
   network: "eip155:84532",
   asset: "0xUSDC",
-  maxAmount: "10000",
+  amount: "10000",
   payTo: "0xRecipient",
   maxTimeoutSeconds: 300,
 };
 
 /**
- * What the facilitator actually receives: the route normalizes requirements at
- * the HTTP boundary, so both spellings of the price are populated.
+ * What the facilitator actually receives: the route PARSES requirements at the
+ * HTTP boundary, so the price arrives canonicalized onto `amount`.
  */
 const normalizedRequirements = { ...mockRequirements, amount: "10000" };
 
@@ -84,6 +84,52 @@ describe("createFacilitatorRoutes", () => {
       const res = await post(app, "/verify", { payload: mockPayload });
 
       expect(res.status).toBe(400);
+      expect(fac.verify).not.toHaveBeenCalled();
+    });
+
+    // The old message was "missing payload or requirements", which is a lie
+    // when the requirements object is right there and merely has no price.
+    it("says what is actually wrong when requirements carry no price", async () => {
+      const fac = makeMockFacilitator();
+      const app = createFacilitatorRoutes(() => fac);
+      const { amount: _amount, ...priceless } = mockRequirements;
+
+      const res = await post(app, "/verify", { payload: mockPayload, requirements: priceless });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { invalidReason: string };
+      expect(body.invalidReason).toMatch(/no price/);
+      expect(fac.verify).not.toHaveBeenCalled();
+    });
+
+    it("accepts the legacy `maxAmount` spelling and hands over a canonical `amount`", async () => {
+      const fac = makeMockFacilitator();
+      const app = createFacilitatorRoutes(() => fac);
+      const { amount, ...rest } = mockRequirements;
+
+      const res = await post(app, "/verify", {
+        payload: mockPayload,
+        requirements: { ...rest, maxAmount: amount },
+      });
+
+      expect(res.status).toBe(200);
+      expect(fac.verify).toHaveBeenCalledWith(mockPayload, normalizedRequirements);
+    });
+
+    // SECURITY: an offer showing one price and asking to be paid another is not
+    // reconciled in anyone's favour — it is refused.
+    it("refuses requirements whose two price spellings disagree", async () => {
+      const fac = makeMockFacilitator();
+      const app = createFacilitatorRoutes(() => fac);
+
+      const res = await post(app, "/verify", {
+        payload: mockPayload,
+        requirements: { ...mockRequirements, amount: "1000", maxAmount: "1000000000" },
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { invalidReason: string };
+      expect(body.invalidReason).toMatch(/ambiguous/);
       expect(fac.verify).not.toHaveBeenCalled();
     });
   });

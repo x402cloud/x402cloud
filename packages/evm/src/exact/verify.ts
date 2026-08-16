@@ -6,11 +6,20 @@ import { verifyPermit2Authorization } from "../shared.js";
 /**
  * Verify an exact payment authorization.
  * Checks signature, spender, recipient, deadline, balance, and allowance.
+ *
+ * The shared check only requires the authorization to COVER the quote, which is
+ * right for `upto` (settle for less than authorized) and wrong for `exact`: the
+ * exact proxy transfers the whole authorization, so anything above the quote is
+ * money the payer never agreed to spend on this call. Require equality.
  */
 export async function verifyExact(
   signer: VerifySigner,
   payload: ExactPayload,
   requirements: PaymentRequirements,
 ): Promise<VerifyResponse> {
+  const authorized = payload.permit2Authorization.permitted.amount;
+  if (BigInt(authorized) !== BigInt(requirements.amount)) {
+    return { isValid: false, invalidReason: "authorization_not_exact" };
+  }
   return verifyPermit2Authorization(signer, payload, requirements, X402_EXACT_PROXY, EXACT_WITNESS_FIELDS);
 }

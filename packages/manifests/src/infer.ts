@@ -6,6 +6,9 @@ import {
   wholesaleEmbedCost,
   wholesaleImageCost,
   IMAGE_NEURONS_PER_GEN,
+  QUOTE_INPUT_TOKENS,
+  QUOTE_OUTPUT_TOKENS,
+  QUOTE_EMBED_TOKENS,
   type NeuronRate,
 } from "./infer-pricing.js";
 import type { ManifestParams, ServiceManifestEntry } from "./types.js";
@@ -49,9 +52,11 @@ type InferRow = {
 };
 
 /**
- * Worst-case assumptions for maxPrice:
- *   text:  500 input tokens + 2000 output tokens
- *   embed: 8192 input tokens (max context)
+ * Worst-case assumptions for maxPrice — the token counts come from
+ * `QUOTE_*_TOKENS` so the service enforcing them (apps/infer caps `max_tokens`)
+ * and the quote advertising them read the same number:
+ *   text:  QUOTE_INPUT_TOKENS input + QUOTE_OUTPUT_TOKENS output
+ *   embed: QUOTE_EMBED_TOKENS input (max context)
  *   image: 1 generation at 1024x1024, 4 steps
  */
 function maxPriceFor(row: InferRow, marginBps: number): string {
@@ -61,9 +66,12 @@ function maxPriceFor(row: InferRow, marginBps: number): string {
     return retailDisplay(wholesaleImageCost(IMAGE_NEURONS_PER_GEN), marginBps);
   }
   if (row.kind === "embed") {
-    return retailDisplay(wholesaleEmbedCost(neurons, 8192), marginBps);
+    return retailDisplay(wholesaleEmbedCost(neurons, QUOTE_EMBED_TOKENS), marginBps);
   }
-  return retailDisplay(wholesaleTextCost(neurons, 500, 2000), marginBps);
+  return retailDisplay(
+    wholesaleTextCost(neurons, QUOTE_INPUT_TOKENS, QUOTE_OUTPUT_TOKENS),
+    marginBps,
+  );
 }
 
 const INFER_ROWS: ReadonlyArray<InferRow> = Object.freeze([

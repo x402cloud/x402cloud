@@ -84,7 +84,7 @@ const mockRequirements = {
   scheme: "upto" as const,
   network: "eip155:84532" as const,
   asset: "0xUSDC",
-  maxAmount: "10000",
+  amount: "10000",
   payTo: "0xRecipient",
   maxTimeoutSeconds: 300,
 };

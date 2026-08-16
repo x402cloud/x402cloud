@@ -10,19 +10,19 @@ const TOKEN = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 const TX_HASH = "0xabc123def456" as `0x${string}`;
 const FACILITATOR = "0x9999999999999999999999999999999999999999" as const;
 
-function makeRequirements(): PaymentRequirements {
+function makeRequirements(overrides?: { amount?: string }): PaymentRequirements {
   return {
     scheme: "upto",
     network: "eip155:8453",
     asset: TOKEN,
-    maxAmount: "100000",
+    amount: overrides?.amount ?? "100000",
     payTo: PAY_TO,
     maxTimeoutSeconds: 300,
     extra: { facilitator: FACILITATOR },
   };
 }
 
-function makePayload(): UptoPayload {
+function makePayload(overrides?: { authorized?: string }): UptoPayload {
   const now = Math.floor(Date.now() / 1000);
   return {
     signature: "0xdeadbeef",
@@ -30,7 +30,7 @@ function makePayload(): UptoPayload {
       from: PAYER,
       permitted: {
         token: TOKEN,
-        amount: "100000",
+        amount: overrides?.authorized ?? "100000",
       },
       spender: X402_UPTO_PROXY,
       nonce: "12345",
@@ -76,11 +76,44 @@ function makeSigner(overrides?: {
 }
 
 describe("settleUpto", () => {
+  // SECURITY: the quote is the ceiling, independent of the payer's budget.
+  // An agent wallet authorizing $1.00 for a call quoted at $0.10 must not be
+  // chargeable for $0.20 just because the budget covers it. `settleUpto` is
+  // the LAST line — the resource server asking for this may be buggy or
+  // compromised, and the facilitator is not obliged to believe it.
+  it("rejects a settlement above the quoted price, even when the payer authorized more", async () => {
+    const signer = makeSigner();
+    const result = await settleUpto(
+      signer,
+      makePayload({ authorized: "1000000" }), // payer's wallet budget: $1.00
+      makeRequirements({ amount: "100000" }), // the 402 quoted $0.10
+      "200000", // …and the server asks for $0.20
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.errorReason).toBe("settlement_exceeds_quote");
+    // Nothing was signed or broadcast.
+    expect(signer.signSettlementTx).not.toHaveBeenCalled();
+    expect(signer.sendRawSettlementTx).not.toHaveBeenCalled();
+  });
+
+  it("settles a metered amount below the quote", async () => {
+    const result = await settleUpto(
+      makeSigner(),
+      makePayload({ authorized: "1000000" }),
+      makeRequirements({ amount: "100000" }),
+      "42000",
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.settledAmount).toBe("42000");
+  });
+
   it("rejects if settlementAmount > authorized amount", async () => {
     const result = await settleUpto(
       makeSigner(),
-      makePayload(),
-      makeRequirements(),
+      makePayload({ authorized: "100000" }),
+      makeRequirements({ amount: "500000" }),
       "200000",
     );
     expect(result.success).toBe(false);

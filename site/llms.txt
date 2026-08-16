@@ -1,17 +1,17 @@
 # x402cloud.ai
 
-OpenAI-compatible AI inference that agents pay for per token in USDC over the x402 standard. No signup, no API keys — payment is authentication.
+OpenAI-compatible AI inference that agents pay for per call in USDC over the x402 standard. No signup, no API keys — payment is authentication. Testnet only: Base Sepolia (`eip155:84532`).
 
 ## Overview
 
-The product is metered inference. `infer.x402cloud.ai` serves OpenAI-compatible chat, embedding and image endpoints and charges the tokens actually consumed, not a subscription and not a fixed per-call fee.
+The product is metered inference. `infer.x402cloud.ai` serves OpenAI-compatible chat, embedding and image endpoints. There is no subscription: each call settles its own metered cost. Text models meter on tokens, embeddings meter on request characters, and image generation is a flat per-image price — see Pricing below.
 
-- **Inference API** — `https://infer.x402cloud.ai`, OpenAI wire format, 8 models, priced per token
+- **Inference API** — `https://infer.x402cloud.ai`, OpenAI wire format, 8 models on 8 short-name routes plus 3 OpenAI-compatible routes
 - **Metered payment (`upto`)** — the client authorizes a ceiling; settlement moves only the metered cost
-- **Open-source rail** — 5 npm packages implementing x402 v2, free to use for any API, ours or yours
+- **Open-source rail** — 5 npm packages implementing x402 v2, MIT licensed
 - **Hosted facilitator** — verification and USDC settlement at `facilitator.x402cloud.ai`; any conformant facilitator also works
 
-Current network: **Base Sepolia (testnet)**. Amounts settle in test USDC. Mainnet is a configuration change, not a rewrite.
+Current network: **Base Sepolia (`eip155:84532`) only** — confirmed by `GET https://facilitator.x402cloud.ai/supported`, which returns `{"schemes":["exact","upto"],"networks":["eip155:84532"],...}`. All amounts settle in Base Sepolia test USDC (`0x036CbD53842c5426634e7929541eC2318f3dCF7e`). Base mainnet is not served today.
 
 Standards conformance: 402 responses follow the Linux Foundation x402 v2 specification (`x402Version: 2`, CAIP-2 networks, `PAYMENT-SIGNATURE` header). The price appears as both `amount` (the spec's name) and `maxAmount` (this implementation's original name), carrying the same value, so stock clients — `@x402/fetch`, Cloudflare Agents SDK — can read an offer without special-casing.
 
@@ -20,49 +20,76 @@ Standards conformance: 402 responses follow the Linux Foundation x402 v2 specifi
 The x402 protocol adds payment negotiation to standard HTTP using the `402 Payment Required` status code:
 
 1. **Request** — Agent sends a normal HTTP request to a paid endpoint
-2. **402 Response** — Server returns HTTP 402 with `X-Payment-Requirements` header containing: price, recipient address, network, scheme, facilitator URL
-3. **Sign & Retry** — Client signs a Permit2 USDC authorization (no on-chain tx yet) and retries the request with an `X-Payment` header containing the signed payload
+2. **402 Response** — Server returns HTTP 402. The JSON body is the `PaymentRequired` object (`x402Version`, `resource`, `accepts[]`). The same object, base64-encoded, is also in the `PAYMENT-REQUIRED` response header. Each `accepts[]` entry carries `scheme`, `network`, `asset`, `amount` and `maxAmount` (identical values), `payTo`, `maxTimeoutSeconds`, `extra.facilitator`
+3. **Sign & Retry** — Client signs a Permit2 USDC authorization (no on-chain tx yet) and retries the request with the base64 payload in the `PAYMENT-SIGNATURE` request header. The legacy name `X-PAYMENT` is still accepted on the request
 4. **Verify** — Server-side middleware sends the payment payload to the facilitator for verification
 5. **Process** — If valid, the server processes the request normally
-6. **Settle** — After a successful response, the middleware calls the facilitator to settle the payment on-chain via Permit2 transfer
+6. **Settle** — After a successful response, the middleware calls the facilitator to settle the payment on-chain via Permit2 transfer, and returns the settled amount in the `X-Payment-Settled` response header
 
 Key properties:
-- **Metered (upto) payments**: Client authorizes a max amount, pays only for actual usage (e.g., tokens consumed)
+- **Metered (upto) payments**: Client authorizes a max amount, pays only for the amount the service's `meter()` reports (never more than authorized)
 - **No pre-funding**: Permit2 authorizations are signed off-chain, funds only move on settlement
 - **Atomic**: Payment settles only after successful service delivery
 - **Stateless**: No sessions, no accounts, no databases — just HTTP headers
 
 ## Live Services
 
-### infer.x402cloud.ai — Edge AI Inference
+### infer.x402cloud.ai — Metered AI Inference
 
-OpenAI-compatible AI inference with per-token x402 micropayments. Runs on Cloudflare Workers AI from 330+ edge cities.
+OpenAI-compatible AI inference with x402 micropayments. Runs on Cloudflare Workers AI.
 
 - **Base URL**: `https://infer.x402cloud.ai`
-- **Format**: OpenAI chat completions API
-- **Payment**: x402 upto scheme (USDC on Base)
+- **Format**: OpenAI chat completions API (non-streaming — see Limits below)
+- **Payment**: x402 upto scheme, USDC on Base Sepolia (`eip155:84532`)
 - **Recipient**: `0x207C6D8f63Bf01F70dc6D372693E8D5943848E88`
 - **Service docs**: https://infer.x402cloud.ai/llms.txt
 - **Models list**: https://infer.x402cloud.ai/models
 
 #### Available Models
 
-| Endpoint | Model | Type | Max Price | Description |
-|----------|-------|------|-----------|-------------|
-| POST /nano | @cf/ibm-granite/granite-4.0-h-micro | text | ~$0.001 | Fastest, simple tasks |
-| POST /fast | @cf/meta/llama-4-scout-17b-16e-instruct | text | ~$0.003 | Quick and capable |
-| POST /smart | @cf/meta/llama-3.1-8b-instruct-fast | text | ~$0.002 | Reliable workhorse |
-| POST /think | @cf/deepseek-ai/deepseek-r1-distill-qwen-32b | text | ~$0.012 | Deep reasoning |
-| POST /code | @cf/qwen/qwen2.5-coder-32b-instruct | text | ~$0.004 | Code specialist |
-| POST /big | @cf/meta/llama-3.3-70b-instruct-fp8-fast | text | ~$0.006 | Highest quality |
-| POST /embed | @cf/baai/bge-m3 | embed | ~$0.001 | Text embeddings |
-| POST /image | @cf/black-forest-labs/flux-1-schnell | image | ~$0.003 | Image generation |
+`maxPrice` is the ceiling the 402 asks the client to authorize, not the charge. Authoritative live values: `GET https://infer.x402cloud.ai/models`.
+
+| Endpoint | Model | Type | maxPrice (ceiling) | Description |
+|----------|-------|------|--------------------|-------------|
+| POST /nano | @cf/ibm-granite/granite-4.0-h-micro | text | $0.000277 | Fastest, simple tasks |
+| POST /fast | @cf/meta/llama-4-scout-17b-16e-instruct | text | $0.002202 | Quick and capable |
+| POST /smart | @cf/meta/llama-3.1-8b-instruct-fast | text | $0.000946 | Reliable workhorse |
+| POST /think | @cf/deepseek-ai/deepseek-r1-distill-qwen-32b | text | $0.012013 | Deep reasoning |
+| POST /code | @cf/qwen/qwen2.5-coder-32b-instruct | text | $0.002794 | Code specialist |
+| POST /big | @cf/meta/llama-3.3-70b-instruct-fp8-fast | text | $0.005582 | Highest quality |
+| POST /embed | @cf/baai/bge-m3 | embed | $0.000115 | Text embeddings |
+| POST /image | @cf/black-forest-labs/flux-1-schnell | image | $0.002280 | Image generation |
+
+Ceilings are computed from fixed worst-case assumptions, not from the request:
+
+- text: 500 input tokens + 2,000 output tokens
+- embed: 8,192 input tokens (max context)
+- image: 1 generation, 1024x1024, 4 steps
+
+#### OpenAI-Compatible Routes
+
+| Route | Kind | maxPrice quoted | Default model |
+|-------|------|-----------------|---------------|
+| POST /v1/chat/completions | text | $0.012013 | nano |
+| POST /v1/embeddings | embed | $0.000115 | embed |
+| POST /v1/images/generations | image | $0.002280 | image |
+
+These routes quote the **highest ceiling of their kind**, because the model is unknown until the request body is parsed. `POST /v1/chat/completions` with `{"model":"fast"}` therefore asks for $0.012013 of authorization, while `POST /fast` asks for $0.002202. Settlement meters down to the resolved model's real cost either way, so the charge is the same — but the wallet allowance required differs. Use the short-name routes when the authorization amount matters.
+
+An unrecognised `model` value does not 404: `resolveModel` silently falls back to the route's default model (`nano` for chat, `embed`, `image`) and bills at that model's rate.
+
+#### Limits
+
+- **No streaming.** `stream: true` is ignored; the response is always a single JSON body. An OpenAI SDK expecting `text/event-stream` will fail.
+- **`POST /v1/images/generations` returns raw PNG bytes** with `Content-Type: image/png` — not OpenAI's `{"created":…,"data":[{"b64_json":…}]}` envelope.
+- **Unknown model names fall back silently** (see above).
 
 #### Request Format
 
 ```json
 POST /fast
 Content-Type: application/json
+PAYMENT-SIGNATURE: <base64-encoded signed payment payload>
 
 {
   "messages": [{"role": "user", "content": "Hello"}],
@@ -89,14 +116,22 @@ Content-Type: application/json
 
 #### Pricing
 
-Cost per neuron: $0.000011. Markup: 1.10x + $0.001 base fee. Uses x402 "upto" metering — you authorize a max price but only pay for actual tokens consumed.
+Retail = wholesale × 1.20. Wholesale = Cloudflare Workers AI neurons × $0.000011 per neuron. The margin is `DEFAULT_MARGIN_BPS = 2000` (2,000 basis points) in `@x402cloud/middleware`. **There is no base fee and no subscription minimum.** The smallest amount that can move on-chain is 1 micro-USDC ($0.000001).
+
+What each kind meters on differs, and the difference is material:
+
+| Kind | Metered on | Ceiling vs charge |
+|------|-----------|-------------------|
+| text (nano, fast, smart, think, code, big) | `usage.prompt_tokens` + `usage.completion_tokens` from the model response; falls back to a `ceil(chars / 4)` estimate if the runtime returns no `usage` | charge is usually well below the ceiling |
+| embed | `ceil(input.length / 4)` characters of the request — a character estimate, not model-reported tokens | charge is usually well below the ceiling |
+| image | a constant 172.8 neurons per generation | **charge always equals the ceiling** ($0.002280) — the ceiling is derived from the same constant, so `image` is a flat per-image price, not metered |
 
 ### facilitator.x402cloud.ai — Payment Facilitator
 
 Hosted payment verification and USDC settlement service. Used by x402 middleware to verify payments and settle on-chain without servers needing private keys.
 
 - **Base URL**: `https://facilitator.x402cloud.ai`
-- **Network**: Base Sepolia (eip155:84532) — transitioning to Base mainnet (eip155:8453)
+- **Networks served**: Base Sepolia (`eip155:84532`) only — `GET /supported` returns `{"schemes":["exact","upto"],"networks":["eip155:84532"],"facilitator":"0x207C…8E88"}`
 - **Facilitator address**: `0x207C6D8f63Bf01F70dc6D372693E8D5943848E88`
 - **Service docs**: https://facilitator.x402cloud.ai/llms.txt
 
@@ -107,8 +142,12 @@ Hosted payment verification and USDC settlement service. Used by x402 middleware
 | / | GET | No | Service info and endpoint listing |
 | /health | GET | No | Health check — returns `{"status":"ok"}` |
 | /supported | GET | No | Supported schemes, networks, and facilitator address |
-| /verify | POST | Bearer token | Verify an x402 payment payload against requirements |
-| /settle | POST | Bearer token | Settle a verified payment on-chain via Permit2 |
+| /verify | POST | Bearer token | Verify an `upto` payment payload against requirements |
+| /settle | POST | Bearer token | Settle a verified `upto` payment on-chain via Permit2 |
+| /verify-exact | POST | Bearer token | Verify an `exact` payment payload |
+| /settle-exact | POST | Bearer token | Settle a verified `exact` payment on-chain |
+
+Response shapes: verify returns `{"isValid":true,"payer":"0x…"}` or `{"isValid":false,"invalidReason":"…"}`; settle returns `{"success":true,"transaction":"0x…","network":"eip155:84532","settledAmount":"…"}` or `{"success":false,"errorReason":"…"}`, and may return HTTP 202 with `"pending":true` while a broadcast awaits confirmation.
 
 ## npm Packages
 
@@ -160,10 +199,12 @@ Usage:
 import { wrapFetchWithPayment } from "@x402cloud/client";
 import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { base } from "viem/chains";
+import { baseSepolia } from "viem/chains";
 
+// infer.x402cloud.ai settles on Base Sepolia (eip155:84532). The wallet needs
+// Base Sepolia test USDC and a one-time Permit2 approval on that same chain.
 const account = privateKeyToAccount("0xYOUR_PRIVATE_KEY");
-const walletClient = createWalletClient({ account, chain: base, transport: http() });
+const walletClient = createWalletClient({ account, chain: baseSepolia, transport: http() });
 
 const x402Fetch = wrapFetchWithPayment({ signer: walletClient });
 
@@ -189,7 +230,7 @@ Exports:
 - `buildPaymentRequired` — Build 402 response manually
 - **Types**: `UptoRouteConfig`, `UptoRoutesConfig`, `VerifyFn`, `SettleFn`
 
-Usage with hosted facilitator:
+Usage with hosted facilitator. This example gates a third party's own API and uses Base mainnet (`eip155:8453`) as an illustration of route config — it is not a description of x402cloud's own services, which run on Base Sepolia only:
 ```typescript
 import { Hono } from "hono";
 import { remoteUptoPaymentMiddleware } from "@x402cloud/middleware";
@@ -249,8 +290,10 @@ const settlement = await facilitator.settle(payload, requirements, settlementAmo
 | Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` | All EVM chains |
 | USDC (Base) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | Base mainnet |
 | USDC (Base Sepolia) | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | Base Sepolia |
-| x402 Upto Proxy | `0x4020633461b2895a48930Ff97eE8fCdE8E520002` | Base Sepolia |
-| x402 Exact Proxy | `0x4020615294c913F045dc10f0a5cdEbd86c280001` | Base Sepolia |
+| x402 Upto Proxy | `0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002` | Base mainnet AND Base Sepolia (same address) |
+| x402 Exact Proxy | `0x402085c248EeA27D92E8b30b2C58ed07f9E20001` | Base mainnet AND Base Sepolia (same address) |
+
+The two proxies are the canonical Coinbase contracts, deployed by deterministic CREATE2, so the address is identical on Base mainnet (`eip155:8453`) and Base Sepolia (`eip155:84532`). Source of truth in this repo: `packages/evm/src/constants.ts` (`X402_UPTO_PROXY`, `X402_EXACT_PROXY`), pinned by `packages/evm/test/proxy-addresses.test.ts`.
 
 ## Architecture
 

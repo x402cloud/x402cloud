@@ -7,6 +7,7 @@ import type { MiddlewareOptions } from "@x402cloud/middleware";
 import type { ServiceMeta, ServiceRoute, ServiceSkill } from "@x402cloud/discovery";
 import { mountDiscovery } from "@x402cloud/discovery/hono";
 import { NETWORK_NAME_TO_CAIP2 } from "@x402cloud/evm";
+import { QUOTE_OUTPUT_TOKENS } from "@x402cloud/manifests";
 import { MODELS, type ModelType } from "./models.js";
 import { createMeter, createOpenAIMeter } from "./meter.js";
 import {
@@ -106,7 +107,7 @@ const CHAT_REQUEST_SCHEMA = {
   required: ["messages"],
   properties: {
     messages: { type: "array", items: { type: "object", required: ["role", "content"], properties: { role: { type: "string", enum: ["system", "user", "assistant"] }, content: { type: "string" } } } },
-    max_tokens: { type: "integer", default: 512 },
+    max_tokens: { type: "integer", default: 512, maximum: QUOTE_OUTPUT_TOKENS, description: `Clamped to ${QUOTE_OUTPUT_TOKENS} — the output length the advertised price is computed from.` },
     temperature: { type: "number", default: 0.7 },
   },
 };
@@ -147,16 +148,61 @@ function exampleFor(name: string, type: ModelType): string[] {
   return [`POST ${BASE_URL}/${name} with {"prompt":"a cat in space"}`];
 }
 
-const DISCOVERY_META: ServiceMeta = {
-  name: "infer.x402cloud.ai",
-  description: "AI inference using the x402 protocol standard. OpenAI-compatible. Pay per token with USDC — no signup, no API keys.",
-  baseUrl: BASE_URL,
-  shortDescription: "Edge AI inference with x402 micropayments. OpenAI-compatible.",
-  facilitator: "https://facilitator.x402cloud.ai",
-  defaultOutputModes: ["application/json", "image/png"],
+/**
+ * How a settlement network is described to humans and to agents.
+ *
+ * Every published surface derives its wording from this table rather than
+ * hard-coding a chain name. That matters because "USDC on Base" — the phrase
+ * these pages carried while running on Sepolia — names the *mainnet* asset, so
+ * an operator reading the docs could fund a real wallet against a testnet
+ * service. Deriving the label from `env.NETWORK` means the caveat cannot be
+ * left behind when the network changes, in either direction.
+ */
+type NetworkInfo = {
+  /** Human label, e.g. "Base Sepolia testnet". */
+  readonly label: string;
+  /** What the payer actually spends, e.g. "test USDC". */
+  readonly asset: string;
+  /** True when the funds are not real. Surfaces add a warning when set. */
+  readonly isTestnet: boolean;
 };
 
-function openAIDiscoveryRoute(endpoint: OpenAIEndpoint): ServiceRoute {
+const NETWORK_INFO: Record<string, NetworkInfo> = {
+  "eip155:84532": { label: "Base Sepolia testnet", asset: "test USDC", isTestnet: true },
+  "eip155:8453": { label: "Base", asset: "USDC", isTestnet: false },
+};
+
+/** Fail loudly rather than describe an unknown network as if it were mainnet. */
+function networkInfo(network: `${string}:${string}`): NetworkInfo {
+  const info = NETWORK_INFO[network];
+  if (!info) throw new Error(`No published description for network ${network}`);
+  return info;
+}
+
+/** One sentence, or empty on mainnet. Appended wherever an amount is shown. */
+function testnetNotice(info: NetworkInfo): string {
+  return info.isTestnet
+    ? `Settlement runs on ${info.label} — amounts are ${info.asset}, not real funds.`
+    : "";
+}
+
+/** How payment is described in one phrase, e.g. "x402 upto (test USDC on Base Sepolia testnet)". */
+function paymentSummary(info: NetworkInfo): string {
+  return `x402 upto (${info.asset} on ${info.label})`;
+}
+
+function buildDiscoveryMeta(info: NetworkInfo): ServiceMeta {
+  return {
+    name: "infer.x402cloud.ai",
+    description: `AI inference using the x402 protocol standard. OpenAI-compatible. Pay per token with ${info.asset} on ${info.label} — no signup, no API keys.${info.isTestnet ? ` ${testnetNotice(info)}` : ""}`,
+    baseUrl: BASE_URL,
+    shortDescription: `Edge AI inference with x402 micropayments. OpenAI-compatible.${info.isTestnet ? ` ${info.label}.` : ""}`,
+    facilitator: "https://facilitator.x402cloud.ai",
+    defaultOutputModes: ["application/json", "image/png"],
+  };
+}
+
+function openAIDiscoveryRoute(endpoint: OpenAIEndpoint, info: NetworkInfo): ServiceRoute {
   const reqSchema =
     endpoint.kind === "text"
       ? CHAT_REQUEST_SCHEMA
@@ -176,7 +222,7 @@ function openAIDiscoveryRoute(endpoint: OpenAIEndpoint): ServiceRoute {
     summary: `OpenAI-compatible ${endpoint.kind} endpoint (model selected via request body)`,
     tags: [endpoint.kind, "openai"],
     kind: endpoint.kind,
-    payment: { maxPrice: endpointMaxPrice(endpoint), network: "Base (USDC)", payTo: SERVER_ADDRESS },
+    payment: { maxPrice: endpointMaxPrice(endpoint), network: `${info.label} (${info.asset})`, payTo: SERVER_ADDRESS },
     requestSchema: reqSchema,
     responseSchema: resSchema,
     responseContentType: endpoint.kind === "image" ? "image/png" : "application/json",
@@ -184,11 +230,12 @@ function openAIDiscoveryRoute(endpoint: OpenAIEndpoint): ServiceRoute {
   };
 }
 
-const DISCOVERY_ROUTES: ServiceRoute[] = [
+function buildDiscoveryRoutes(info: NetworkInfo): ServiceRoute[] {
+  return [
   { path: "/models", method: "GET", summary: "List available models", tags: ["free"] },
   { path: "/v1/models", method: "GET", summary: "List available models (OpenAI-compatible)", tags: ["free", "openai"] },
   { path: "/llms.txt", method: "GET", summary: "LLM-readable documentation", tags: ["free"], responseContentType: "text/plain", responseSchema: { type: "string" } },
-  ...OPENAI_ENDPOINTS.map(openAIDiscoveryRoute),
+  ...OPENAI_ENDPOINTS.map((endpoint) => openAIDiscoveryRoute(endpoint, info)),
   ...Object.entries(MODELS).map(([name, config]) => {
     const isText = config.type === "text";
     const isEmbed = config.type === "embed";
@@ -199,14 +246,15 @@ const DISCOVERY_ROUTES: ServiceRoute[] = [
       summary: config.description,
       tags: [config.type],
       kind: config.type,
-      payment: { maxPrice: config.maxPrice, network: "Base (USDC)", payTo: SERVER_ADDRESS },
+      payment: { maxPrice: config.maxPrice, network: `${info.label} (${info.asset})`, payTo: SERVER_ADDRESS },
       requestSchema: isText ? CHAT_REQUEST_SCHEMA : isEmbed ? EMBED_REQUEST_SCHEMA : IMAGE_REQUEST_SCHEMA,
       responseSchema: isText ? CHAT_RESPONSE_SCHEMA : isEmbed ? EMBED_RESPONSE_SCHEMA : IMAGE_RESPONSE_SCHEMA,
       responseContentType: config.type === "image" ? "image/png" : "application/json",
       examples: exampleFor(name, config.type),
     } satisfies ServiceRoute;
   }),
-];
+  ];
+}
 
 const DISCOVERY_SKILLS: ServiceSkill[] = Object.entries(MODELS).map(([name, config]) => ({
   id: name,
@@ -218,12 +266,29 @@ const DISCOVERY_SKILLS: ServiceSkill[] = Object.entries(MODELS).map(([name, conf
 
 // --- Inference handlers ---
 
+/**
+ * Clamp a caller's `max_tokens` to the figure the advertised price was computed
+ * from (`QUOTE_OUTPUT_TOKENS`, the same constant `maxPriceFor` prices against).
+ *
+ * Without this the quote is a fiction: a caller could ask for ten times the
+ * output the price assumed, and the settlement ceiling would then be enforcing
+ * a number that never described the work. Capping here keeps the quote honest
+ * at the source, so the ceiling and the price mean the same thing.
+ *
+ * Input length is not capped — a long prompt is legitimate, and over-length
+ * input is caught by the settlement ceiling rather than by rejecting the call.
+ */
+function cappedMaxTokens(requested: unknown): number {
+  const asked = typeof requested === "number" && Number.isFinite(requested) ? requested : 512;
+  return Math.max(1, Math.min(Math.floor(asked), QUOTE_OUTPUT_TOKENS));
+}
+
 async function handleText(c: Context<Env>, name: string) {
   const body = await c.req.json();
   const config = MODELS[name];
   const result = await c.env.AI.run(config.model as Parameters<Ai["run"]>[0], {
     messages: body.messages,
-    max_tokens: body.max_tokens ?? 512,
+    max_tokens: cappedMaxTokens(body.max_tokens),
     temperature: body.temperature ?? 0.7,
   });
   const id = `chatcmpl-${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
@@ -274,7 +339,10 @@ function corsMiddleware(c: Context<Env>, next: () => Promise<void>) {
     origin: origins.length === 1 ? origins[0] : origins,
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Authorization", "Content-Type", "X-PAYMENT", "PAYMENT-SIGNATURE"],
-    exposeHeaders: ["X-Payment-Settled", "X-Payment-Required"],
+    // Must match what the middleware actually emits: PAYMENT-REQUIRED, not
+    // X-Payment-Required. A browser client cannot read a header it is not
+    // exposed, so the wrong name here silently hides the 402 offer.
+    exposeHeaders: ["X-Payment-Settled", "PAYMENT-REQUIRED"],
     maxAge: 600,
   })(c, next);
 }
@@ -299,6 +367,8 @@ async function rateLimitFree(c: Context<Env>, next: () => Promise<void>) {
 
 type Deps = {
   readonly middleware: ReturnType<typeof remoteUptoPaymentMiddleware>;
+  /** How this deployment's settlement network is described on every surface. */
+  readonly network: NetworkInfo;
 };
 
 /**
@@ -326,7 +396,7 @@ function buildDeps(env: Bindings): Deps {
     undefined,
     buildSettlementOptions(env),
   );
-  return Object.freeze({ middleware });
+  return Object.freeze({ middleware, network: networkInfo(network) });
 }
 
 /** Build the Hono app, closing over an immutable `Deps` record. */
@@ -350,6 +420,7 @@ export function createApp(env: Bindings): Hono<Env> {
   a.use("/.well-known/*", rateLimitFree);
 
   a.get("/", (c) => {
+    const net = deps.network;
     const accept = c.req.header("Accept") ?? "";
     if (accept.includes("text/html")) {
       const modelRows = Object.entries(MODELS)
@@ -359,8 +430,8 @@ export function createApp(env: Bindings): Hono<Env> {
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>infer.x402cloud.ai — AI Inference via x402 Protocol</title>
-<meta name="description" content="AI inference using the x402 protocol standard. OpenAI-compatible. Pay per token with USDC.">
-<meta property="og:title" content="infer.x402cloud.ai"><meta property="og:description" content="AI inference using the x402 protocol standard. OpenAI-compatible. Pay per token with USDC.">
+<meta name="description" content="AI inference using the x402 protocol standard. OpenAI-compatible. Pay per call with ${net.asset} on ${net.label} — no signup, no API keys.">
+<meta property="og:title" content="infer.x402cloud.ai"><meta property="og:description" content="AI inference using the x402 protocol standard. OpenAI-compatible. Pay per call with ${net.asset} on ${net.label} — no signup, no API keys.">
 <meta property="og:image" content="https://x402cloud.ai/og.png"><meta name="twitter:card" content="summary_large_image">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -395,10 +466,11 @@ footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--border);font-
 footer a{color:var(--dim);transition:color .15s}footer a:hover{color:var(--mid)}
 @media(max-width:600px){.w{padding:48px 20px;padding-top:80px}h1{font-size:28px}.info{grid-template-columns:1fr}.info-item{border-right:none}nav .inner{padding:0 20px}}
 </style></head><body>
-<nav><div class="inner"><a href="https://x402cloud.ai" class="wordmark">x402cloud.ai</a><div class="nav-links"><a href="https://x402cloud.ai/#services">Services</a><a href="https://x402cloud.ai/#packages">Packages</a><a href="https://status.x402cloud.ai">Status</a><a href="https://github.com/x402cloud/x402cloud">GitHub</a><a href="https://x402cloud.ai/llms.txt">Docs</a></div></div></nav>
+<nav><div class="inner"><a href="https://x402cloud.ai" class="wordmark">x402cloud.ai</a><div class="nav-links"><a href="https://x402cloud.ai/#models">Models</a><a href="https://x402cloud.ai/#pricing">Pricing</a><a href="https://status.x402cloud.ai">Status</a><a href="https://github.com/x402cloud/x402cloud">GitHub</a><a href="https://x402cloud.ai/llms.txt">Docs</a></div></div></nav>
 <div class="w">
 <h1>infer.x402cloud.ai</h1>
-<p class="sub">AI inference using the x402 protocol standard. No signup. No API keys. Pay per token with USDC on Base.</p>
+<p class="sub">AI inference using the x402 protocol standard. No signup. No API keys. Pay per token with ${net.asset} on ${net.label}.</p>
+${net.isTestnet ? `<p class="sub" style="color:var(--bright);border:1px solid var(--bd);padding:10px 14px;margin-bottom:24px"><strong>Testnet.</strong> ${testnetNotice(net)} Fund a wallet from the Circle faucet — the full payment flow works end to end.</p>` : ""}
 <div class="links">
 <a href="/models">Models API</a>
 <a href="/llms.txt">llms.txt</a>
@@ -408,7 +480,7 @@ footer a{color:var(--dim);transition:color .15s}footer a:hover{color:var(--mid)}
 </div>
 
 <div class="info">
-<div class="info-item"><div class="info-label">Payment</div><div class="info-value">x402 upto (USDC on Base)</div></div>
+<div class="info-item"><div class="info-label">Payment</div><div class="info-value">${paymentSummary(net)}</div></div>
 <div class="info-item"><div class="info-label">Recipient</div><div class="info-value"><code>${SERVER_ADDRESS.slice(0, 6)}...${SERVER_ADDRESS.slice(-4)}</code></div></div>
 <div class="info-item"><div class="info-label">Format</div><div class="info-value">OpenAI chat completions</div></div>
 <div class="info-item"><div class="info-label">Runtime</div><div class="info-value">Cloudflare Workers AI</div></div>
@@ -416,7 +488,7 @@ footer a{color:var(--dim);transition:color .15s}footer a:hover{color:var(--mid)}
 
 <h2>Models</h2>
 <table>
-<tr><th>Endpoint</th><th>Description</th><th>Max Price</th><th>Model</th></tr>
+<tr><th>Endpoint</th><th>Description</th><th>Ceiling per call</th><th>Model</th></tr>
 ${modelRows}
 </table>
 
@@ -428,7 +500,15 @@ ${modelRows}
 # Returns 402 → pay with @x402cloud/client to auto-handle payment</div>
 
 <h2>OpenAI-Compatible</h2>
-<div class="code-block"># Point any OpenAI client at the /v1 base — POST /v1/chat/completions works.
+<div class="code-block"># Point an OpenAI client at the /v1 base. Request and response bodies match.
+#
+# Three things do NOT match — check before you switch:
+#   - No streaming. "stream": true is ignored and the whole completion comes
+#     back as one JSON response, where an OpenAI SDK expects text/event-stream.
+#   - /v1/images/generations returns raw PNG bytes, not the OpenAI
+#     {"data":[{"b64_json": ...}]} envelope.
+#   - An unrecognised model name is served by this endpoint&#39;s default model
+#     and billed at that model&#39;s rate, rather than returning an error.
 curl -X POST https://infer.x402cloud.ai/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello"}]}'
@@ -449,7 +529,9 @@ curl -X POST https://infer.x402cloud.ai/v1/chat/completions \\
       description: "AI inference using the x402 protocol standard. No signup. No API keys.",
       docs: "https://infer.x402cloud.ai/llms.txt",
       models_url: "https://infer.x402cloud.ai/models",
-      payment: "x402 upto (USDC on Base)",
+      payment: paymentSummary(net),
+      network: { label: net.label, asset: net.asset, testnet: net.isTestnet },
+      ...(net.isTestnet ? { warning: testnetNotice(net) } : {}),
       recipient: SERVER_ADDRESS,
       client_sdk: "npm install @x402cloud/client",
       x402_standard: "https://x402.org",
@@ -470,7 +552,9 @@ curl -X POST https://infer.x402cloud.ai/v1/chat/completions \\
 
   // Standard discovery surface: /openapi.json, /agents.json, /llms.txt,
   // /robots.txt, /sitemap.xml, /.well-known/agent-card.json, /.well-known/api-catalog.
-  mountDiscovery(a, DISCOVERY_META, DISCOVERY_ROUTES, { skills: DISCOVERY_SKILLS });
+  mountDiscovery(a, buildDiscoveryMeta(deps.network), buildDiscoveryRoutes(deps.network), {
+    skills: DISCOVERY_SKILLS,
+  });
 
   // Payment middleware (instance built once for this isolate, not per request).
   a.use("/*", (c, next) => deps.middleware(c, next));
@@ -481,8 +565,10 @@ curl -X POST https://infer.x402cloud.ai/v1/chat/completions \\
     try {
       return await HANDLERS[MODELS[name].type](c, name);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "infer-error";
-      return c.json({ error: message }, 500);
+      // The caller is unauthenticated by design — payment is the only gate — so
+      // upstream messages are logged, not reflected. Nothing settles on a 5xx.
+      console.error("infer handler failed", { model: name, error: e });
+      return c.json({ error: "internal_error" }, 500);
     }
   };
 

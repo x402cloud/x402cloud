@@ -3,6 +3,7 @@ import {
   extractPaymentHeader,
   decodePaymentHeader,
   encodeRequirementsHeader,
+  toWirePaymentRequired,
   type Network,
   type VerifyResponse,
   type SettleResponse,
@@ -10,6 +11,13 @@ import {
   type PaymentRequired,
 } from "@x402cloud/protocol";
 import { DEFAULT_USDC_ADDRESSES } from "@x402cloud/evm";
+import { buildRequirements } from "./response.js";
+
+/** Reason string on the 402 returned when no payment header was presented. */
+export const NO_PAYMENT_HEADER_ERROR = "PAYMENT-SIGNATURE header is required";
+
+/** Reason string on the 402/412 returned when a presented payment fails verification. */
+export const VERIFICATION_FAILED_ERROR = "Payment verification failed";
 
 /**
  * Reject any string that contains characters not safe for HTTP header values:
@@ -189,8 +197,16 @@ export type PaymentStrategy<TRouteConfig extends BaseRouteConfig, TPayload> = {
   /** Cast the decoded payload to the scheme-specific type */
   castPayload: (decoded: unknown) => TPayload;
 
-  /** Build the 402 PaymentRequired response body */
-  buildPaymentRequired: (routeConfig: TRouteConfig, resourceUrl: string) => PaymentRequired;
+  /**
+   * Build the 402 PaymentRequired response body. `error` is the reason this
+   * 402 is being returned — supplied by the caller, because the builder cannot
+   * know it.
+   */
+  buildPaymentRequired: (
+    routeConfig: TRouteConfig,
+    resourceUrl: string,
+    error?: string,
+  ) => PaymentRequired;
 
   /**
    * Scheme-specific `PaymentRequirements.extra` (e.g. upto's `facilitator`).
@@ -240,7 +256,11 @@ export async function processPayment<TRouteConfig extends BaseRouteConfig, TPayl
   const paymentHeader = extractPaymentHeader(request);
 
   if (!paymentHeader) {
-    const paymentRequired = strategy.buildPaymentRequired(routeConfig, request.url);
+    const paymentRequired = strategy.buildPaymentRequired(
+      routeConfig,
+      request.url,
+      NO_PAYMENT_HEADER_ERROR,
+    );
     const encoded = encodeRequirementsHeader(paymentRequired);
     return { action: "payment_required", response: paymentRequired, encoded };
   }
@@ -254,32 +274,34 @@ export async function processPayment<TRouteConfig extends BaseRouteConfig, TPayl
     return { action: "error", status: 400, body: { error: "Invalid payment header" } };
   }
 
-  const requirements: PaymentRequirements = {
+  // Same constructor the 402 was built with — the price we verify and settle
+  // against is by construction the price we advertised.
+  const requirements: PaymentRequirements = buildRequirements({
     scheme: strategy.scheme,
     network: routeConfig.network,
     asset,
     amount: strategy.getPrice(routeConfig),
-    maxAmount: strategy.getPrice(routeConfig),
     payTo: routeConfig.payTo,
-    maxTimeoutSeconds: routeConfig.maxTimeoutSeconds ?? 300,
-    ...(strategy.requirementsExtra ? { extra: strategy.requirementsExtra } : {}),
-  };
+    maxTimeoutSeconds: routeConfig.maxTimeoutSeconds,
+    extra: strategy.requirementsExtra,
+  });
 
   // Verify payment authorization
   const verification = await strategy.verify(payload, requirements);
 
   if (!verification.isValid) {
     const status = verification.invalidReason === "permit2_allowance_required" ? 412 : 402;
-    const paymentRequired = strategy.buildPaymentRequired(routeConfig, request.url);
+    const paymentRequired = strategy.buildPaymentRequired(
+      routeConfig,
+      request.url,
+      VERIFICATION_FAILED_ERROR,
+    );
     const encoded = encodeRequirementsHeader(paymentRequired);
     return {
       action: "invalid_payment",
       status,
       body: {
-        // Spread first: the builder sets the generic "header is required"
-        // error, and this path has a more specific reason to report.
-        ...paymentRequired,
-        error: "Payment verification failed",
+        ...toWirePaymentRequired(paymentRequired),
         reason: verification.invalidReason,
       },
       encoded,
@@ -362,7 +384,12 @@ export function buildMiddleware<TRouteConfig extends BaseRouteConfig, TPayload>(
       case "pass":
         return next();
       case "payment_required":
-        return c.json(result.response, 402, { "PAYMENT-REQUIRED": result.encoded });
+        // The body carries both price spellings (see `toWirePaymentRequired`)
+        // so a client reading only the spec's `amount`, and one reading only
+        // this implementation's `maxAmount`, can each pay the same offer.
+        return c.json(toWirePaymentRequired(result.response), 402, {
+          "PAYMENT-REQUIRED": result.encoded,
+        });
       case "invalid_payment":
         return c.json(result.body, result.status as 402 | 412, { "PAYMENT-REQUIRED": result.encoded });
       case "error":

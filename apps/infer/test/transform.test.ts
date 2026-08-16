@@ -3,7 +3,6 @@ import {
   toOpenAIChatResponse,
   toOpenAIEmbeddingResponse,
   toOpenAIModelList,
-  toLlmsTxt,
 } from "../src/transform.js";
 
 describe("toOpenAIChatResponse", () => {
@@ -83,21 +82,5 @@ describe("toOpenAIModelList", () => {
     expect(res.data[0].id).toBe("fast");
     expect(res.data[0].owned_by).toBe("x402cloud");
     expect(res.data[0].cf_model).toBe("@cf/meta/llama");
-  });
-});
-
-describe("toLlmsTxt", () => {
-  it("includes permissionless messaging", () => {
-    const models = {
-      fast: { model: "@cf/meta/llama", type: "text" as const, description: "Fast", neurons: { inputPerMillion: 0, outputPerMillion: 0 }, maxPrice: "$0.01" },
-    };
-    const txt = toLlmsTxt(models, "0xABC");
-    expect(txt).toContain("x402 protocol standard");
-    expect(txt).toContain("No signup");
-    expect(txt).toContain("No API keys");
-    expect(txt).toContain("@x402cloud/client");
-    expect(txt).toContain("x402.org");
-    expect(txt).toContain("/fast");
-    expect(txt).toContain("0xABC");
   });
 });

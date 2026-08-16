@@ -23,7 +23,24 @@ export async function settleUpto(
   const { permit2Authorization, signature } = payload;
   const { from, permitted, nonce, deadline, witness } = permit2Authorization;
 
-  // Guard: settlement cannot exceed authorization
+  // Guard 1: settlement cannot exceed the price the resource server QUOTED.
+  //
+  // This is deliberately independent of the same check in the middleware
+  // (`packages/middleware/src/core.ts`). The facilitator may be remote, and the
+  // resource server asking it to settle is not automatically trusted to respect
+  // its own quote — a bug or a compromise there must not turn into a charge the
+  // payer never saw. The payer's signed budget (`permitted.amount`) is NOT the
+  // ceiling: agent clients routinely authorize a wallet budget far above one
+  // call's quote, and charging up to that budget is exactly the failure this
+  // rejects.
+  if (BigInt(settlementAmount) > BigInt(requirements.amount)) {
+    return {
+      success: false,
+      errorReason: "settlement_exceeds_quote",
+    };
+  }
+
+  // Guard 2: settlement cannot exceed authorization (also enforced on-chain).
   if (BigInt(settlementAmount) > BigInt(permitted.amount)) {
     return {
       success: false,

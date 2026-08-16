@@ -21,6 +21,14 @@ export async function settleExact(
   const { permit2Authorization, signature } = payload;
   const { from, permitted, nonce, deadline, witness } = permit2Authorization;
 
+  // Guard: the exact proxy transfers the FULL authorization — there is no
+  // partial-amount argument — so an authorization larger than the quoted price
+  // is an overcharge, not a budget. `verifyExact` rejects it too; this is the
+  // independent check for a remote facilitator whose caller may be wrong.
+  if (BigInt(permitted.amount) !== BigInt(requirements.amount)) {
+    return { success: false, errorReason: "authorization_not_exact" };
+  }
+
   // Re-check deadline before submitting on-chain.
   const deadlineSec = parseUnixSeconds(deadline);
   if (deadlineSec === null) {

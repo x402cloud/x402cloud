@@ -1,7 +1,13 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { createFacilitator, createFacilitatorRoutes, type Facilitator } from "@x402cloud/facilitator";
-import type { Network, PaymentRequirements, SettleResponse } from "@x402cloud/protocol";
+import {
+  parseRequirements,
+  type Network,
+  type PaymentRequirements,
+  type PaymentRequirementsInput,
+  type SettleResponse,
+} from "@x402cloud/protocol";
 import type { UptoPayload, ExactPayload } from "@x402cloud/evm";
 import { CHAINS } from "@x402cloud/evm";
 import { landingPageHtml } from "./html.js";
@@ -333,13 +339,24 @@ function outcomeToResponse(
 app.post("/settle", async (c) => {
   const body = await c.req.json<{
     payload: UptoPayload;
-    requirements: PaymentRequirements;
+    requirements: PaymentRequirementsInput;
     settlementAmount: string;
   }>();
 
-  if (!body.payload || !body.requirements || !body.settlementAmount) {
-    return c.json({ success: false, errorReason: "missing payload, requirements, or settlementAmount" }, 400);
+  if (!body.payload || !body.settlementAmount) {
+    return c.json({ success: false, errorReason: "missing payload or settlementAmount" }, 400);
   }
+
+  // Parse here too. This durable route SHADOWS the shared `/settle` in
+  // `@x402cloud/facilitator`, so anything the shared route guarantees has to be
+  // re-established — notably a canonical `requirements.amount`, which is the
+  // quote ceiling `settleUpto` enforces. It is also what gets serialized into
+  // the RetryJob, so a retry days later settles against the same parsed number.
+  const parsed = parseRequirements(body.requirements);
+  if (!parsed.ok) {
+    return c.json({ success: false, errorReason: parsed.error }, 400);
+  }
+  const requirements = parsed.value;
 
   const nonce = body.payload.permit2Authorization?.nonce;
   if (!nonce) {
@@ -353,15 +370,15 @@ app.post("/settle", async (c) => {
     nonce,
     mode: "broadcast",
     payload: body.payload as unknown as Record<string, unknown>,
-    requirements: body.requirements as unknown as Record<string, unknown>,
+    requirements: requirements as unknown as Record<string, unknown>,
     settlementAmount: body.settlementAmount,
-    network: body.requirements.network,
+    network: requirements.network,
   };
 
   const outcome = await settleWithIdempotency({
     coordinator,
     queue,
-    settle: () => f.settle(body.payload, body.requirements, body.settlementAmount),
+    settle: () => f.settle(body.payload, requirements, body.settlementAmount),
     job,
   });
 
@@ -373,12 +390,20 @@ app.post("/settle", async (c) => {
 app.post("/settle-exact", async (c) => {
   const body = await c.req.json<{
     payload: ExactPayload;
-    requirements: PaymentRequirements;
+    requirements: PaymentRequirementsInput;
   }>();
 
-  if (!body.payload || !body.requirements) {
-    return c.json({ success: false, errorReason: "missing payload or requirements" }, 400);
+  if (!body.payload) {
+    return c.json({ success: false, errorReason: "missing payload" }, 400);
   }
+
+  // Same reason as `/settle` above: this route shadows the shared one, so it
+  // owns the parse that makes `requirements.amount` canonical.
+  const parsed = parseRequirements(body.requirements);
+  if (!parsed.ok) {
+    return c.json({ success: false, errorReason: parsed.error }, 400);
+  }
+  const requirements = parsed.value;
 
   const nonce = body.payload.permit2Authorization?.nonce;
   if (!nonce) {
@@ -392,14 +417,14 @@ app.post("/settle-exact", async (c) => {
     nonce,
     mode: "broadcast",
     payload: body.payload as unknown as Record<string, unknown>,
-    requirements: body.requirements as unknown as Record<string, unknown>,
-    network: body.requirements.network,
+    requirements: requirements as unknown as Record<string, unknown>,
+    network: requirements.network,
   };
 
   const outcome = await settleWithIdempotency({
     coordinator,
     queue,
-    settle: () => f.settleExact(body.payload, body.requirements),
+    settle: () => f.settleExact(body.payload, requirements),
     job,
   });
 

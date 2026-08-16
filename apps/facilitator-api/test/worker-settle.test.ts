@@ -143,7 +143,7 @@ function settleBody() {
       signature: "0xsig",
       permit2Authorization: { nonce: NONCE, permitted: { amount: "10000" } },
     },
-    requirements: { scheme: "upto", network: "eip155:84532", maxAmount: "10000" },
+    requirements: { scheme: "upto", network: "eip155:84532", amount: "10000" },
     settlementAmount: "5000",
   };
 }
@@ -244,6 +244,71 @@ describe("worker /settle (durable)", () => {
     expect(res.status).toBe(401);
     expect(settleMock).not.toHaveBeenCalled();
   });
+
+  // These durable routes SHADOW the shared ones in @x402cloud/facilitator, so
+  // every guarantee the shared route makes has to be re-made here — otherwise
+  // the hosted worker silently runs with weaker checks than the library.
+  describe("shadowing the shared route does not skip its parse", () => {
+    it("canonicalizes a legacy `maxAmount` price onto `amount`", async () => {
+      settleMock.mockResolvedValue(success);
+      const { env } = makeEnv();
+      const body = settleBody();
+      const res = await postSettle(env, {
+        ...body,
+        requirements: { scheme: "upto", network: "eip155:84532", maxAmount: "10000" },
+      });
+
+      expect(res.status).toBe(200);
+      expect(settleMock).toHaveBeenCalledOnce();
+    });
+
+    it("400s on requirements with no price", async () => {
+      const { env } = makeEnv();
+      const body = settleBody();
+      const res = await postSettle(env, {
+        ...body,
+        requirements: { scheme: "upto", network: "eip155:84532" },
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ errorReason: expect.stringMatching(/no price/) });
+      expect(settleMock).not.toHaveBeenCalled();
+    });
+
+    it("400s on requirements whose price spellings disagree", async () => {
+      const { env } = makeEnv();
+      const body = settleBody();
+      const res = await postSettle(env, {
+        ...body,
+        requirements: {
+          scheme: "upto",
+          network: "eip155:84532",
+          amount: "1000",
+          maxAmount: "1000000000",
+        },
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ errorReason: expect.stringMatching(/ambiguous/) });
+      expect(settleMock).not.toHaveBeenCalled();
+    });
+
+    it("puts the parsed requirements — not the raw body — into the retry job", async () => {
+      const { env, queued } = makeEnv();
+      // Force the enqueue path so we can inspect the job that would be retried.
+      settleMock.mockResolvedValue({ success: false, errorReason: "settlement_failed: RPC 503" });
+      const body = settleBody();
+
+      await postSettle(env, {
+        ...body,
+        requirements: { scheme: "upto", network: "eip155:84532", maxAmount: "10000" },
+      });
+
+      const job = queued.at(-1) as RetryJob | undefined;
+      expect(job?.requirements).toMatchObject({ amount: "10000" });
+      expect(job?.requirements).not.toHaveProperty("maxAmount");
+    });
+  });
 });
 
 describe("worker /verify still falls through to shared routes", () => {
@@ -274,7 +339,7 @@ describe("worker queue() consumer", () => {
     nonce: NONCE,
     mode: "broadcast",
     payload: { signature: "0xsig", permit2Authorization: { nonce: NONCE } },
-    requirements: { scheme: "upto", network: "eip155:84532", maxAmount: "10000" },
+    requirements: { scheme: "upto", network: "eip155:84532", amount: "10000" },
     settlementAmount: "5000",
     network: "eip155:84532",
   };

@@ -36,10 +36,13 @@ describe("pricing (wholesale, BigInt micro-USDC)", () => {
     expect(wholesaleTextCost(neurons, 0, 0)).toBe("0");
   });
 
-  it("wholesaleTextCost truncates sub-micro fractions (no float drift)", () => {
-    // 1 input token at 1 neuron/M: (1 * 1) * 11 / 1_000_000 = 11/1e6 = 0 (truncated)
+  it("wholesaleTextCost floors non-zero work at 1 micro-USDC (no float drift, no free requests)", () => {
+    // 1 input token at 1 neuron/M: (1 * 1) * 11 / 1_000_000 truncates to 0, but
+    // work was done — so it costs the smallest amount that can move on-chain.
+    // Truncating to "0" made settleUpto short-circuit with no transfer at all,
+    // which is a free request, not a rounding discount.
     const neurons = { inputPerMillion: 1, outputPerMillion: 1 };
-    expect(wholesaleTextCost(neurons, 1, 0)).toBe("0");
+    expect(wholesaleTextCost(neurons, 1, 0)).toBe("1");
   });
 
   it("wholesaleEmbedCost uses only input neurons", () => {

@@ -2,6 +2,8 @@ export type {
   Network,
   Scheme,
   PaymentRequirements,
+  PaymentRequirementsInput,
+  ParseResult,
   ResourceInfo,
   PaymentRequired,
   PaymentPayload,
@@ -13,12 +15,14 @@ export type {
   SettlementEvent,
 } from "./types.js";
 
-export { normalizeRequirements } from "./types.js";
+export { normalizeRequirements, parseRequirements } from "./types.js";
 
 export {
   encodePaymentHeader,
   decodePaymentHeader,
   encodeRequirementsHeader,
+  toWireRequirements,
+  toWirePaymentRequired,
   decodeRequirementsHeader,
   extractPaymentHeader,
   parseUsdcAmount,

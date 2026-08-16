@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPaymentRequired, buildExactPaymentRequired } from "../src/response.js";
+import { buildPaymentRequired, buildExactPaymentRequired, buildRequirements } from "../src/response.js";
 import type { UptoRouteConfig, ExactRouteConfig } from "../src/index.js";
 import type { Network } from "@x402cloud/protocol";
 
@@ -28,7 +28,7 @@ describe("buildPaymentRequired (upto)", () => {
     expect(req.scheme).toBe("upto");
     expect(req.network).toBe("eip155:8453");
     expect(req.asset).toBe(baseUsdc);
-    expect(req.maxAmount).toBe("100000");
+    expect(req.amount).toBe("100000");
     expect(req.payTo).toBe(payTo);
     expect(req.maxTimeoutSeconds).toBe(300);
     // The canonical upto witness binds the settler, so the 402 advertises it.
@@ -84,7 +84,7 @@ describe("buildPaymentRequired (upto)", () => {
     };
 
     const result = buildPaymentRequired(cfg, resourceUrl, facilitator);
-    expect(result.accepts[0].maxAmount).toBe("13000");
+    expect(result.accepts[0].amount).toBe("13000");
   });
 });
 
@@ -101,7 +101,7 @@ describe("buildExactPaymentRequired (exact)", () => {
     expect(result.x402Version).toBe(2);
     expect(result.accepts[0].scheme).toBe("exact");
     expect(result.accepts[0].asset).toBe(baseUsdc);
-    expect(result.accepts[0].maxAmount).toBe("50000");
+    expect(result.accepts[0].amount).toBe("50000");
     expect(result.accepts[0].maxTimeoutSeconds).toBe(300);
   });
 
@@ -113,7 +113,7 @@ describe("buildExactPaymentRequired (exact)", () => {
     };
 
     const result = buildExactPaymentRequired(cfg, resourceUrl);
-    expect(result.accepts[0].maxAmount).toBe("2000000");
+    expect(result.accepts[0].amount).toBe("2000000");
   });
 
   it("throws on unknown network without asset override", () => {
@@ -141,11 +141,7 @@ describe("buildExactPaymentRequired (exact)", () => {
   });
 });
 
-describe("x402 v2 wire conformance", () => {
-  // The spec (specs/x402-specification-v2.md §5.1.2) names the price field
-  // `amount`. This implementation has always called it `maxAmount` internally.
-  // Emitting both is what lets a stock x402 client — @x402/fetch, a Cloudflare
-  // agent — read an offer built here, so these assertions are load-bearing.
+describe("the 402 `error` string", () => {
   const cfg: UptoRouteConfig = {
     network: "eip155:8453",
     maxPrice: "$0.10",
@@ -153,24 +149,53 @@ describe("x402 v2 wire conformance", () => {
     meter: () => "100000",
   };
 
-  it("emits both `amount` and `maxAmount`, holding the same value", () => {
-    const req = buildPaymentRequired(cfg, resourceUrl, facilitator).accepts[0];
-
-    expect(req.amount).toBe("100000");
-    expect(req.maxAmount).toBe("100000");
+  // The builder is public API. It cannot know why a caller is returning a 402,
+  // so it does not invent a reason — asserting "the header is missing" on a
+  // 402 returned for a failed signature would simply be false.
+  it("is omitted when the caller gives none", () => {
+    expect(buildPaymentRequired(cfg, resourceUrl, facilitator).error).toBeUndefined();
+    expect(
+      buildExactPaymentRequired({ network: "eip155:8453", price: "$0.05", payTo }, resourceUrl)
+        .error,
+    ).toBeUndefined();
   });
 
-  it("emits `amount` on exact offers too", () => {
-    const exact: ExactRouteConfig = { network: "eip155:8453", price: "$0.05", payTo };
-    const req = buildExactPaymentRequired(exact, resourceUrl).accepts[0];
+  it("is whatever the caller passed", () => {
+    const result = buildPaymentRequired(cfg, resourceUrl, facilitator, "quota exhausted");
 
-    expect(req.amount).toBe("50000");
-    expect(req.maxAmount).toBe("50000");
+    expect(result.error).toBe("quota exhausted");
+  });
+});
+
+describe("buildRequirements", () => {
+  // One constructor: the offer we advertise and the requirements we verify
+  // against come from here, so a new spec field is one edit, not two.
+  it("applies the default asset and timeout", () => {
+    const req = buildRequirements({
+      scheme: "upto",
+      network: "eip155:8453",
+      amount: "100000",
+      payTo,
+    });
+
+    expect(req).toEqual({
+      scheme: "upto",
+      network: "eip155:8453",
+      asset: baseUsdc,
+      amount: "100000",
+      payTo,
+      maxTimeoutSeconds: 300,
+    });
   });
 
-  it("carries the spec's optional `error` string on the unpaid 402", () => {
-    const result = buildPaymentRequired(cfg, resourceUrl, facilitator);
+  it("omits `extra` entirely when none is given", () => {
+    const req = buildRequirements({
+      scheme: "exact",
+      network: "eip155:8453",
+      amount: "1",
+      payTo,
+    });
 
-    expect(result.error).toBe("PAYMENT-SIGNATURE header is required");
+    expect(req).not.toHaveProperty("extra");
   });
 });

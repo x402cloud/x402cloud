@@ -1,5 +1,5 @@
 import { Hono, type MiddlewareHandler } from "hono";
-import { normalizeRequirements, type PaymentRequirements } from "@x402cloud/protocol";
+import { parseRequirements, type PaymentRequirementsInput } from "@x402cloud/protocol";
 import type { UptoPayload, ExactPayload } from "@x402cloud/evm";
 import type { Facilitator } from "./types.js";
 
@@ -24,15 +24,6 @@ export type CreateFacilitatorRoutesOptions = {
  * @param getFacilitator - Lazy getter (supports Workers lazy init and Docker eager init)
  * @param options        - Optional auth middleware
  */
-/**
- * True when `requirements` carries a price under either spelling. Checked at
- * the HTTP boundary so a malformed body gets a 400 with a reason, rather than
- * letting `normalizeRequirements` throw into a bare 500.
- */
-function hasPrice(requirements?: PaymentRequirements): boolean {
-  return Boolean(requirements && (requirements.maxAmount ?? requirements.amount));
-}
-
 export function createFacilitatorRoutes(
   getFacilitator: () => Facilitator,
   options: CreateFacilitatorRoutesOptions = {},
@@ -50,15 +41,19 @@ export function createFacilitatorRoutes(
   routes.post("/verify", async (c) => {
     const body = await c.req.json<{
       payload: UptoPayload;
-      requirements: PaymentRequirements;
+      requirements: PaymentRequirementsInput;
     }>();
 
-    if (!body.payload || !hasPrice(body.requirements)) {
-      return c.json({ isValid: false, invalidReason: "missing payload or requirements" }, 400);
+    if (!body.payload) {
+      return c.json({ isValid: false, invalidReason: "missing payload" }, 400);
+    }
+    const parsed = parseRequirements(body.requirements);
+    if (!parsed.ok) {
+      return c.json({ isValid: false, invalidReason: parsed.error }, 400);
     }
 
     const f = getFacilitator();
-    const result = await f.verify(body.payload, normalizeRequirements(body.requirements));
+    const result = await f.verify(body.payload, parsed.value);
     return c.json(result);
   });
 
@@ -66,20 +61,20 @@ export function createFacilitatorRoutes(
   routes.post("/settle", async (c) => {
     const body = await c.req.json<{
       payload: UptoPayload;
-      requirements: PaymentRequirements;
+      requirements: PaymentRequirementsInput;
       settlementAmount: string;
     }>();
 
-    if (!body.payload || !hasPrice(body.requirements) || !body.settlementAmount) {
-      return c.json({ success: false, errorReason: "missing payload, requirements, or settlementAmount" }, 400);
+    if (!body.payload || !body.settlementAmount) {
+      return c.json({ success: false, errorReason: "missing payload or settlementAmount" }, 400);
+    }
+    const parsed = parseRequirements(body.requirements);
+    if (!parsed.ok) {
+      return c.json({ success: false, errorReason: parsed.error }, 400);
     }
 
     const f = getFacilitator();
-    const result = await f.settle(
-      body.payload,
-      normalizeRequirements(body.requirements),
-      body.settlementAmount,
-    );
+    const result = await f.settle(body.payload, parsed.value, body.settlementAmount);
     return c.json(result);
   });
 
@@ -87,15 +82,19 @@ export function createFacilitatorRoutes(
   routes.post("/verify-exact", async (c) => {
     const body = await c.req.json<{
       payload: ExactPayload;
-      requirements: PaymentRequirements;
+      requirements: PaymentRequirementsInput;
     }>();
 
-    if (!body.payload || !hasPrice(body.requirements)) {
-      return c.json({ isValid: false, invalidReason: "missing payload or requirements" }, 400);
+    if (!body.payload) {
+      return c.json({ isValid: false, invalidReason: "missing payload" }, 400);
+    }
+    const parsed = parseRequirements(body.requirements);
+    if (!parsed.ok) {
+      return c.json({ isValid: false, invalidReason: parsed.error }, 400);
     }
 
     const f = getFacilitator();
-    const result = await f.verifyExact(body.payload, normalizeRequirements(body.requirements));
+    const result = await f.verifyExact(body.payload, parsed.value);
     return c.json(result);
   });
 
@@ -103,15 +102,19 @@ export function createFacilitatorRoutes(
   routes.post("/settle-exact", async (c) => {
     const body = await c.req.json<{
       payload: ExactPayload;
-      requirements: PaymentRequirements;
+      requirements: PaymentRequirementsInput;
     }>();
 
-    if (!body.payload || !hasPrice(body.requirements)) {
-      return c.json({ success: false, errorReason: "missing payload or requirements" }, 400);
+    if (!body.payload) {
+      return c.json({ success: false, errorReason: "missing payload" }, 400);
+    }
+    const parsed = parseRequirements(body.requirements);
+    if (!parsed.ok) {
+      return c.json({ success: false, errorReason: parsed.error }, 400);
     }
 
     const f = getFacilitator();
-    const result = await f.settleExact(body.payload, normalizeRequirements(body.requirements));
+    const result = await f.settleExact(body.payload, parsed.value);
     return c.json(result);
   });
 

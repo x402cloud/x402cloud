@@ -50,7 +50,9 @@ export const paymentFlow = wrapProbe("payment-flow", async (target, signal) => {
 
   const body = (await inferResponse.json()) as {
     x402Version?: number;
-    accepts?: Array<{ scheme?: string; network?: string; maxAmount?: string }>;
+    // `amount` is the spec field; `maxAmount` is the legacy mirror still on the
+    // wire. A probe reads what a foreign client would read, so it takes either.
+    accepts?: Array<{ scheme?: string; network?: string; amount?: string; maxAmount?: string }>;
   };
 
   const schemesOffered = (body.accepts ?? []).map((a) => a.scheme ?? "unknown");

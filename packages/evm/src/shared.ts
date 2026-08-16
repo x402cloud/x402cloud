@@ -106,8 +106,8 @@ export async function verifyPermit2Authorization(
     return { isValid: false, invalidReason: "not_yet_valid" };
   }
 
-  // 5. Authorized amount >= server's maxAmount
-  if (BigInt(permitted.amount) < BigInt(requirements.maxAmount)) {
+  // 5. Authorized amount >= the quoted price
+  if (BigInt(permitted.amount) < BigInt(requirements.amount)) {
     return { isValid: false, invalidReason: "insufficient_authorized_amount" };
   }
 
@@ -194,7 +194,7 @@ export async function createPermit2Payload<W extends Permit2Witness>(
   const message = {
     permitted: {
       token: requirements.asset as `0x${string}`,
-      amount: BigInt(requirements.maxAmount),
+      amount: BigInt(requirements.amount),
     },
     spender: proxyAddress,
     nonce,
@@ -215,7 +215,7 @@ export async function createPermit2Payload<W extends Permit2Witness>(
       from: signer.address,
       permitted: {
         token: requirements.asset as `0x${string}`,
-        amount: requirements.maxAmount,
+        amount: requirements.amount,
       },
       spender: proxyAddress,
       nonce: nonce.toString(),

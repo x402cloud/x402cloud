@@ -13,7 +13,7 @@ function makeRequirements(overrides?: Partial<PaymentRequirements>): PaymentRequ
     scheme: "exact",
     network: "eip155:8453",
     asset: TOKEN,
-    maxAmount: "100000",
+    amount: "100000",
     payTo: PAY_TO,
     maxTimeoutSeconds: 300,
     ...overrides,
@@ -113,10 +113,23 @@ describe("verifyExact", () => {
     const result = await verifyExact(
       makeSigner(),
       makePayload({ amount: "1" }),
-      makeRequirements({ maxAmount: "100000" })
+      makeRequirements({ amount: "100000" })
     );
     expect(result.isValid).toBe(false);
-    expect(result.invalidReason).toBe("insufficient_authorized_amount");
+    expect(result.invalidReason).toBe("authorization_not_exact");
+  });
+
+  // SECURITY: the exact proxy transfers the WHOLE authorization — there is no
+  // partial-amount argument — so an authorization above the quote is not a
+  // budget, it is an overcharge waiting to happen.
+  it("rejects an authorization ABOVE the quoted price", async () => {
+    const result = await verifyExact(
+      makeSigner(),
+      makePayload({ amount: "1000000" }),
+      makeRequirements({ amount: "100000" })
+    );
+    expect(result.isValid).toBe(false);
+    expect(result.invalidReason).toBe("authorization_not_exact");
   });
 
   it("rejects invalid signature", async () => {

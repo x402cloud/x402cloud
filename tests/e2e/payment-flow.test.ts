@@ -339,7 +339,11 @@ describe("x402 payment flow (Anvil fork of Base Sepolia)", () => {
     expect(body.accepts).toHaveLength(1);
     expect(body.accepts[0].scheme).toBe("upto");
     expect(body.accepts[0].network).toBe(NETWORK);
-    expect(body.accepts[0].maxAmount).toBe(parseUsdcAmount("$0.01"));
+    // Both price spellings, same value: `amount` is what the x402 v2 spec (and
+    // therefore any stock client) reads, `maxAmount` is the legacy mirror we
+    // still emit. A client reading either one pays the same price.
+    expect(body.accepts[0].amount).toBe(parseUsdcAmount("$0.01"));
+    expect((body.accepts[0] as { maxAmount?: string }).maxAmount).toBe(parseUsdcAmount("$0.01"));
     // Canonical upto witness binds the settler — the 402 must advertise it.
     expect(body.accepts[0].extra).toEqual({ facilitator: facilitatorAccount.address });
 
@@ -366,7 +370,7 @@ describe("x402 payment flow (Anvil fork of Base Sepolia)", () => {
       scheme: "upto" as const,
       network: NETWORK,
       asset: USDC,
-      maxAmount: parseUsdcAmount("$0.01"),
+      amount: parseUsdcAmount("$0.01"),
       payTo: PAY_TO,
       maxTimeoutSeconds: 300,
       extra: { facilitator: facilitatorAccount.address },

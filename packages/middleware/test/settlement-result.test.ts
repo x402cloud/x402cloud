@@ -6,21 +6,9 @@ import type { MiddlewareOptions, SettlementIntent, SettlementOutcome } from "../
 import type { UptoRoutesConfig } from "../src/types.js";
 import type { UptoPayload } from "@x402cloud/evm";
 
-// Same module mocks as core.test.ts — keep the unit isolated from protocol/evm internals.
-vi.mock("@x402cloud/protocol", () => ({
-  extractPaymentHeader: vi.fn((req: Request) =>
-    req.headers.get("PAYMENT-SIGNATURE") ?? req.headers.get("X-PAYMENT") ?? null,
-  ),
-  decodePaymentHeader: vi.fn((header: string) => JSON.parse(atob(header))),
-  parseUsdcAmount: vi.fn((price: string) => {
-    const cleaned = price.replace(/[$,\s]/g, "");
-    const [intPart, fracPart = ""] = cleaned.split(".");
-    const padded = fracPart.padEnd(6, "0").slice(0, 6);
-    return (intPart + padded).replace(/^0+/, "") || "0";
-  }),
-  encodeRequirementsHeader: vi.fn((required: unknown) => btoa(JSON.stringify(required))),
-}));
 
+// @x402cloud/protocol is NOT mocked: it is zero-dependency and pure, so a
+// hand-written stand-in would only reimplement the thing it stands in for.
 vi.mock("@x402cloud/evm", async () => {
   const actual = await import("@x402cloud/evm");
   return {

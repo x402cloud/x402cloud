@@ -1,5 +1,12 @@
 // Generic payment processing (strategy pattern)
-export { processPayment, buildMiddleware, runSettlement, redactSignature } from "./generic-core.js";
+export {
+  processPayment,
+  buildMiddleware,
+  runSettlement,
+  redactSignature,
+  NO_PAYMENT_HEADER_ERROR,
+  VERIFICATION_FAILED_ERROR,
+} from "./generic-core.js";
 export type {
   PaymentStrategy,
   PaymentFlowResult,
@@ -25,7 +32,11 @@ export { createResilientFetch, nextBreakerState } from "./resilience.js";
 export type { CircuitBreaker, BreakerEvent } from "./resilience.js";
 
 // Response builders
-export { buildPaymentRequired, buildExactPaymentRequired } from "./response.js";
+export { buildPaymentRequired, buildExactPaymentRequired, buildRequirements } from "./response.js";
+export type { RequirementsSpec } from "./response.js";
+
+// Quote enforcement
+export { clampToQuote } from "./core.js";
 
 // Margin helpers for marketplace merchant-of-record model
 export { applyMargin, clampToAuthorized, retailPrice, DEFAULT_MARGIN_BPS } from "./margin.js";

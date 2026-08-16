@@ -14,7 +14,7 @@ function makeRequirements(overrides?: Partial<PaymentRequirements>): PaymentRequ
     scheme: "upto",
     network: "eip155:8453",
     asset: TOKEN,
-    maxAmount: "100000",
+    amount: "100000",
     payTo: PAY_TO,
     maxTimeoutSeconds: 300,
     extra: { facilitator: FACILITATOR },
@@ -121,7 +121,7 @@ describe("verifyUpto", () => {
     const result = await verifyUpto(
       makeSigner(),
       makePayload({ amount: "1" }),
-      makeRequirements({ maxAmount: "100000" }),
+      makeRequirements({ amount: "100000" }),
       FACILITATOR,
     );
     expect(result.isValid).toBe(false);

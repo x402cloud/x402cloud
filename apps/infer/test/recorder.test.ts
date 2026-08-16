@@ -14,7 +14,7 @@ const REQS = {
   scheme: "upto" as const,
   network: "eip155:84532" as const,
   asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  maxAmount: "10000",
+  amount: "10000",
   payTo: "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88",
   maxTimeoutSeconds: 300,
 };

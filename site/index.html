@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>x402cloud.ai — AI Inference Agents Pay For Per Token</title>
-  <meta name="description" content="OpenAI-compatible AI inference that agents pay for per token in USDC. No signup, no API keys — payment is authentication. Built on the x402 standard.">
-  <meta property="og:title" content="x402cloud.ai — Open Source x402 Protocol Implementation">
-  <meta property="og:description" content="The open-source implementation of the x402 protocol standard. Add HTTP-native payments to any API with USDC.">
-  <meta property="og:image" content="https://x402cloud.pages.dev/og.png">
+  <title>x402cloud.ai — AI Inference Agents Pay For Per Call</title>
+  <meta name="description" content="OpenAI-compatible AI inference with no account and no API key. Your agent authorizes a ceiling, signs a 402, and pays the metered cost in USDC over the x402 standard. Base Sepolia testnet today.">
+  <meta property="og:title" content="x402cloud.ai — AI Inference Agents Pay For Per Call">
+  <meta property="og:description" content="An OpenAI-compatible inference endpoint with no account and no API key. Your agent's wallet is the credential: it gets a 402, signs it, and pays per call in USDC. Testnet today.">
+  <meta property="og:image" content="https://x402cloud.ai/og.png">
   <meta property="og:url" content="https://x402cloud.ai">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="x402cloud.ai">
-  <meta name="twitter:description" content="The open-source implementation of the x402 protocol standard. Add HTTP-native payments to any API with USDC.">
-  <meta name="twitter:image" content="https://x402cloud.pages.dev/og.png">
+  <meta name="twitter:title" content="x402cloud.ai — AI Inference Agents Pay For Per Call">
+  <meta name="twitter:description" content="An OpenAI-compatible inference endpoint with no account and no API key. Your agent's wallet is the credential: it gets a 402, signs it, and pays per call in USDC. Testnet today.">
+  <meta name="twitter:image" content="https://x402cloud.ai/og.png">
   <link rel="canonical" href="https://x402cloud.ai/">
   <script type="application/ld+json">
   {
@@ -23,7 +23,7 @@
         "@type": "Organization",
         "name": "x402cloud.ai",
         "url": "https://x402cloud.ai",
-        "description": "Open-source implementation of the x402 protocol standard",
+        "description": "Metered AI inference that agents pay for per call over the x402 standard — no account, no API key.",
         "sameAs": [
           "https://github.com/x402cloud/x402cloud",
           "https://www.npmjs.com/org/x402cloud"
@@ -31,22 +31,10 @@
       },
       {
         "@type": "WebAPI",
-        "name": "infer.x402cloud.ai — Edge AI Inference",
+        "name": "infer.x402cloud.ai — Metered AI Inference",
         "url": "https://infer.x402cloud.ai",
-        "description": "OpenAI-compatible edge AI inference with x402 micropayments. Llama, DeepSeek, Qwen, Flux models. Pay per call with USDC on Base.",
+        "description": "OpenAI-compatible AI inference with x402 micropayments. Llama, Granite, DeepSeek, Qwen and Flux models on Cloudflare Workers AI. No account and no API key — the wallet is the credential. Settles in USDC on Base Sepolia (testnet).",
         "documentation": "https://infer.x402cloud.ai/llms.txt",
-        "provider": {
-          "@type": "Organization",
-          "name": "x402cloud.ai",
-          "url": "https://x402cloud.ai"
-        }
-      },
-      {
-        "@type": "WebAPI",
-        "name": "facilitator.x402cloud.ai — Payment Facilitator",
-        "url": "https://facilitator.x402cloud.ai",
-        "description": "Hosted x402 payment verification and USDC settlement service. Multi-chain support from 330+ Cloudflare edge cities.",
-        "documentation": "https://facilitator.x402cloud.ai/llms.txt",
         "provider": {
           "@type": "Organization",
           "name": "x402cloud.ai",
@@ -559,7 +547,7 @@
   <div class="hero">
     <div class="hero-text">
       <h1>AI inference<br><span class="dim">your agent pays for</span></h1>
-      <p class="lead">An OpenAI-compatible endpoint that charges per token in USDC over the x402 standard. No signup, no API keys, no invoice. Your agent gets a 402, signs it, and the tokens arrive.</p>
+      <p class="lead">No account. No API key. No human in the loop. Your agent's wallet is the credential — it gets a 402, signs it, and the tokens come back. OpenAI-compatible, charged per call in USDC over the x402 standard. Running on Base Sepolia testnet today.</p>
       <div class="hero-actions">
         <a href="https://infer.x402cloud.ai" class="btn btn-primary">Start inferring</a>
         <a href="#models" class="btn btn-ghost">Models &amp; prices</a>
@@ -586,7 +574,7 @@
         <div><span class="ln">11</span>&nbsp;&nbsp;&nbsp;&nbsp;}),</div>
         <div><span class="ln">12</span>&nbsp;&nbsp;})</div>
         <div><span class="ln">13</span></div>
-        <div><span class="ln">14</span><span class="c">// 402 signed, settled, tokens returned.</span></div>
+        <div><span class="ln">14</span><span class="c">// 402 asks $0.012013, settles the real cost.</span></div>
       </div>
     </div>
   </div>
@@ -616,7 +604,7 @@
       <div class="flow-step">
         <div class="flow-num">Step 04</div>
         <div class="flow-label">Settle</div>
-        <div class="flow-desc">We charge the tokens actually used</div>
+        <div class="flow-desc">We settle the metered cost, never more</div>
       </div>
     </div>
   </section>
@@ -625,23 +613,23 @@
 
   <section>
     <div class="section-label">Why</div>
-    <div class="section-title">Metered, not subscribed</div>
-    <div class="section-desc">An inference call's cost is unknown until the tokens exist. Fixed-price payment cannot express that. Metered payment can.</div>
+    <div class="section-title">The wallet is the account</div>
+    <div class="section-desc">An agent with a wallet and no human cannot sign up for anything. That is the gap this closes — and metering is what makes paying per call worth doing at all.</div>
     <div class="stack-grid">
       <div class="stack-card">
         <div class="stack-num">01</div>
-        <h3>Pay for tokens, not ceilings</h3>
-        <p>Your agent authorizes a maximum. We run the model, count the tokens, and settle the real figure. The difference is never taken — it was never moved.</p>
+        <h3>Nothing to sign up for</h3>
+        <p>No signup form, no API key to rotate, no card on file, no dashboard a person has to log into. An agent that can sign a Permit2 authorization can buy inference. That is the whole onboarding.</p>
       </div>
       <div class="stack-card">
         <div class="stack-num">02</div>
-        <h3>A wallet is the account</h3>
-        <p>No signup form, no API key to rotate, no card on file. An agent that can sign can buy. That is the whole onboarding.</p>
+        <h3>Why not call Workers AI directly?</h3>
+        <p>You can — these are Cloudflare Workers AI models, and we say so. Direct access needs a Cloudflare account, an API token and a billing relationship, all of which need a human. We charge Cloudflare's rate plus 20% and need none of them.</p>
       </div>
       <div class="stack-card">
         <div class="stack-num">03</div>
-        <h3>OpenAI wire format</h3>
-        <p>POST /v1/chat/completions, /v1/embeddings, /v1/images/generations, GET /v1/models. Point an existing client at the base URL and the shapes match.</p>
+        <h3>Metered, not subscribed</h3>
+        <p>A call's cost is unknown until the tokens exist. Your agent authorizes a ceiling, we run the model, and settlement moves the real figure. The difference is never taken — it was never moved.</p>
       </div>
     </div>
   </section>
@@ -650,48 +638,74 @@
 
   <section id="models">
     <div class="section-label">Models</div>
-    <div class="section-title">Eight models, one endpoint</div>
-    <div class="section-desc">Call a model by short name (<code>fast</code>) or by the OpenAI field (<code>"model": "fast"</code>). Prices below are the ceiling your agent authorizes; settlement takes only the metered cost. Live figures: <a href="https://infer.x402cloud.ai/models" style="color: var(--text-bright); border-bottom: 1px dashed var(--border-dashed);">infer.x402cloud.ai/models</a>.</div>
+    <div class="section-title">Eight models, eleven routes</div>
+    <div class="section-desc">Eight short-name routes (<code>POST /fast</code>) plus three OpenAI-compatible ones (<code>/v1/chat/completions</code>, <code>/v1/embeddings</code>, <code>/v1/images/generations</code>). Every figure below is a <strong>ceiling</strong> your agent authorizes, computed from a fixed worst case — 500 input and 2,000 output tokens for text, 8,192 tokens for embeddings, one 1024&times;1024 image at 4 steps. Settlement takes the metered cost instead. <strong>These are Base Sepolia test dollars today, not real ones.</strong> Live figures: <a href="https://infer.x402cloud.ai/models" style="color: var(--text-bright); border-bottom: 1px dashed var(--border-dashed);">infer.x402cloud.ai/models</a>.</div>
+    <div class="section-desc">One caveat on the ceilings: the OpenAI routes cannot know which model you want until they have parsed the body, so they quote the highest ceiling of their kind. <code>POST /v1/chat/completions</code> with <code>"model": "fast"</code> asks your wallet to authorize $0.012013, where <code>POST /fast</code> asks $0.002202. Settlement meters both down to the same real cost — but if you are sizing a wallet allowance, use the short-name routes.</div>
     <div class="services-grid">
       <div class="service-card">
         <div class="service-domain">nano</div>
         <h3>Fastest, simple tasks</h3>
-        <p>IBM Granite 4.0 H Micro. Ceiling $0.000277 per call — you are charged the tokens you actually use.</p>
+        <p>IBM Granite 4.0 H Micro. Ceiling $0.000277 per call; you are charged the input and output tokens the model reports.</p>
       </div>
       <div class="service-card">
         <div class="service-domain">fast</div>
         <h3>Quick and capable</h3>
-        <p>Llama 4 Scout 17B. Ceiling $0.002202 per call — you are charged the tokens you actually use.</p>
+        <p>Llama 4 Scout 17B. Ceiling $0.002202 per call; you are charged the input and output tokens the model reports.</p>
       </div>
       <div class="service-card">
         <div class="service-domain">smart</div>
         <h3>Reliable workhorse</h3>
-        <p>Llama 3.1 8B Instruct. Ceiling $0.000946 per call — you are charged the tokens you actually use.</p>
+        <p>Llama 3.1 8B Instruct. Ceiling $0.000946 per call; you are charged the input and output tokens the model reports.</p>
       </div>
       <div class="service-card">
         <div class="service-domain">big</div>
         <h3>Highest quality</h3>
-        <p>Llama 3.3 70B FP8. Ceiling $0.005582 per call — you are charged the tokens you actually use.</p>
+        <p>Llama 3.3 70B FP8. Ceiling $0.005582 per call; you are charged the input and output tokens the model reports.</p>
       </div>
       <div class="service-card">
         <div class="service-domain">think</div>
         <h3>Deep reasoning</h3>
-        <p>DeepSeek R1 Distill Qwen 32B. Ceiling $0.012013 per call — you are charged the tokens you actually use.</p>
+        <p>DeepSeek R1 Distill Qwen 32B. Ceiling $0.012013 per call; you are charged the input and output tokens the model reports.</p>
       </div>
       <div class="service-card">
         <div class="service-domain">code</div>
         <h3>Code specialist</h3>
-        <p>Qwen2.5 Coder 32B. Ceiling $0.002794 per call — you are charged the tokens you actually use.</p>
+        <p>Qwen2.5 Coder 32B. Ceiling $0.002794 per call; you are charged the input and output tokens the model reports.</p>
       </div>
       <div class="service-card">
         <div class="service-domain">embed</div>
         <h3>Text embeddings</h3>
-        <p>BAAI BGE-M3. Ceiling $0.000115 per call — you are charged the tokens you actually use.</p>
+        <p>BAAI BGE-M3. Ceiling $0.000115 per call. Charged on the length of the text you send &mdash; one token per four characters, counted from the request, not reported by the model.</p>
       </div>
       <div class="service-card">
         <div class="service-domain">image</div>
         <h3>Image generation</h3>
-        <p>FLUX.1 schnell. Ceiling $0.002280 per call — you are charged the tokens you actually use.</p>
+        <p>FLUX.1 schnell. <strong>A flat $0.002280 per image</strong> &mdash; there is nothing to meter on a generation, so the ceiling and the charge are the same figure. Step count does not change it.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section id="compat">
+    <div class="section-label">Compatibility</div>
+    <div class="section-title">OpenAI wire format, with three edges</div>
+    <div class="section-desc">The paths are the OpenAI ones — <code>/v1/chat/completions</code>, <code>/v1/embeddings</code>, <code>/v1/images/generations</code>, <code>GET /v1/models</code> — and non-streaming chat completions come back in the shape an OpenAI client expects. Three things do not match, and you will hit them in the first ten minutes, so here they are up front.</div>
+    <div class="stack-grid">
+      <div class="stack-card">
+        <div class="stack-num">01</div>
+        <h3>No streaming</h3>
+        <p><code>stream: true</code> is ignored and you get a single JSON body. An OpenAI SDK waiting for <code>text/event-stream</code> will throw. If your client streams by default, turn it off.</p>
+      </div>
+      <div class="stack-card">
+        <div class="stack-num">02</div>
+        <h3>Images come back as PNG bytes</h3>
+        <p><code>/v1/images/generations</code> returns the raw image with <code>Content-Type: image/png</code>, not OpenAI's <code>{"data":[{"b64_json":…}]}</code> envelope. Read the body as bytes, not JSON.</p>
+      </div>
+      <div class="stack-card">
+        <div class="stack-num">03</div>
+        <h3>Unknown model names fall back</h3>
+        <p>A name we do not recognise is not an error: the route quietly uses its default model — <code>nano</code> for chat — and bills at that model's rate. Check <code>GET /v1/models</code> rather than assuming a name mapped.</p>
       </div>
     </div>
   </section>
@@ -715,8 +729,8 @@
       </div>
       <div class="stack-card">
         <div class="stack-num">03</div>
-        <h3>Running on testnet today</h3>
-        <p>Settlement is USDC on <strong>Base Sepolia</strong>, so the amounts above move test dollars, not real ones. Get test USDC from the Circle faucet and the full flow works end to end. Mainnet is the next flip, not a rewrite.</p>
+        <h3>Try the whole flow for free</h3>
+        <p>Settlement is USDC on <strong>Base Sepolia</strong>, so the amounts above move test dollars, not real ones. Get test USDC from the Circle faucet and the full flow — 402, signature, inference, on-chain settlement — works end to end at no cost.</p>
       </div>
     </div>
   </section>
@@ -727,6 +741,15 @@
     <div class="section-label">Open standard</div>
     <div class="section-title">No lock-in underneath</div>
     <div class="section-desc">Payment runs on the Linux Foundation x402 v2 standard, not on anything proprietary to us. Our implementation of it is open source, so you can audit exactly how a charge is calculated and settled — or bring your own client and facilitator. <a href="https://github.com/x402cloud/x402cloud" style="color: var(--text-bright); border-bottom: 1px dashed var(--border-dashed);">Read the source</a>.</div>
+  </section>
+
+  <hr class="divider">
+
+  <section id="roadmap">
+    <div class="section-label">Roadmap — not available yet</div>
+    <div class="section-title">Sovereign EU inference is where this is going</div>
+    <div class="section-desc">Everything above runs on Cloudflare Workers AI, a US provider, and settles in USDC on a US-issued rail. For a GDPR-bound buyer, a healthcare provider or a public body, that is disqualifying no matter how good the developer experience is — and it is not a constraint that gets competed away.</div>
+    <div class="section-desc">The intended answer is metered inference in front of <strong>api.nativekloud.eu</strong>: open-weight models on EU bare metal, zero content retention, no US vendor in the serving path. The settlement side is genuinely unresolved — USDC and Base are both US-owned, so a sovereign edition needs an EU settlement path or an explicit, documented exception. We would rather say that plainly than imply it is already solved. <strong>Nothing sovereign is running today</strong>; if this is the thing you need, it is worth telling us so.</div>
   </section>
 
   <footer>
