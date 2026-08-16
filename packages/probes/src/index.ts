@@ -12,4 +12,7 @@ export {
   inferModels,
   paymentFlow,
   gasEstimate,
+  usdcBalance,
 } from "./probes/index.js";
+export { resolveFacilitatorAddress, type AddressLookup } from "./probes/address.js";
+export { summarizeSettlements, type SettlementSummary, type KVList } from "./settlements.js";

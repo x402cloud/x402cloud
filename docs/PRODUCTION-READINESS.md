@@ -14,7 +14,7 @@ this file is the scoreboard.
 | `pnpm test` | 34/34 tasks pass (all unit suites) |
 | facilitator.x402cloud.ai | `/health` 200, `/supported` → exact+upto on `eip155:84532` |
 | infer.x402cloud.ai | `/health` 200 |
-| status.x402cloud.ai | `/health` 200, 8 probes incl. facilitator gas-wallet balance |
+| status.x402cloud.ai | `/health` 200, 9 probes incl. facilitator gas-wallet + operator USDC balance |
 | x402cloud.ai | landing page 200 (CTAs + pricing section) |
 | Durable settlement | DO coordinator + queue retry shipped and unit-tested (I1/I2 invariants) |
 | Chain-ID guard | facilitator rejects `requirements.network` ≠ configured network (`network_mismatch`) |
@@ -89,17 +89,24 @@ Operator actions (after item 3):
 - [ ] `wrangler kv namespace create SETTLEMENTS`, paste the id, uncomment
       the block, redeploy infer
 
-### 6. Alerting is dashboard-only
+### 6. Alerting is built, not yet wired
 
-status.x402cloud.ai probes everything important (including facilitator
-gas balance — warns below 0.01 ETH) but nothing pages a human. Runbook §7
-specifies the three alerts (low balance, settlement-failure spike,
-liveness).
+`apps/status` now runs a 15-minute cron (workspace#43) that re-checks every
+probe plus settlement health and POSTs a plain-text summary to
+`ALERT_WEBHOOK_URL` on a low facilitator gas balance, any failing probe, or
+a settlement-failure spike — but the secret is unset, so today it is a
+no-op, and the `SETTLEMENTS` KV binding (needed for the settlement-failure
+alert and the dashboard's settlement-health tile) doesn't exist yet either.
 
 Operator actions:
+- [ ] `wrangler kv namespace create SETTLEMENTS` (or reuse the one created
+      for `apps/infer`'s own binding, item 5 above), bind it in
+      `apps/status/wrangler.toml`, redeploy — turns on settlement health
+- [ ] `wrangler secret put ALERT_WEBHOOK_URL --name x402cloud-status` (an
+      ntfy.sh-style topic URL or similar) — turns on the cron alert POST
 - [ ] Point an external uptime monitor (e.g. UptimeRobot / CF health
       checks) at `status.x402cloud.ai/status?target=testnet` and alert on
-      any `"fail"` in the JSON
+      any `"fail"` in the JSON, as a second, independent channel
 - [ ] After mainnet launch, same for `?target=mainnet`
 
 ## Explicitly deferred (known, not blocking)

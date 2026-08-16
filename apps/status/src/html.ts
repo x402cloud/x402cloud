@@ -1,4 +1,4 @@
-import type { ProbeReport, ProbeResult, ProbeStatus } from "@x402cloud/probes";
+import type { ProbeReport, ProbeResult, ProbeStatus, SettlementSummary } from "@x402cloud/probes";
 
 const STATUS_COLORS: Record<ProbeStatus, string> = {
   pass: "#22c55e",
@@ -6,6 +6,12 @@ const STATUS_COLORS: Record<ProbeStatus, string> = {
   warn: "#f59e0b",
   skip: "#6b7280",
 };
+
+// These two probe results are pulled out of the generic list and rendered
+// as dedicated wallet tiles instead (still counted in the pass/fail/warn/skip
+// summary — this is a presentation choice, the JSON `results` array is
+// unchanged).
+const WALLET_PROBE_NAMES = new Set(["gas-estimate", "usdc-balance"]);
 
 function escapeHtml(str: string): string {
   return str
@@ -66,6 +72,70 @@ function renderProbeRow(result: ProbeResult): string {
     </div>`;
 }
 
+/** One large-digit stat tile for a wallet balance probe (ETH gas or USDC revenue). */
+function renderWalletTile(
+  label: string,
+  result: ProbeResult | undefined,
+  unit: string,
+  balanceKey: string,
+): string {
+  if (!result) {
+    return `
+    <div class="wallet-tile">
+      <div class="wallet-label">${escapeHtml(label)}</div>
+      <div class="wallet-value wallet-unavailable">not available</div>
+    </div>`;
+  }
+
+  const color = STATUS_COLORS[result.status];
+  const balance = result.meta?.[balanceKey];
+  const network = result.meta?.network as string | undefined;
+  const address = result.meta?.address as string | undefined;
+  const valueText =
+    balance !== undefined ? `${escapeHtml(String(balance))} ${unit}` : (result.error ?? "unknown");
+
+  return `
+    <div class="wallet-tile" style="border-left-color: ${color}">
+      <div class="wallet-label">
+        <span class="status-dot" style="background: ${color}"></span>
+        ${escapeHtml(label)}
+      </div>
+      <div class="wallet-value">${valueText}</div>
+      <div class="wallet-sub">${network ? escapeHtml(network) : ""}${address ? ` &middot; ${escapeHtml(truncateValue(address))}` : ""}</div>
+      ${result.error ? `<div class="error">${escapeHtml(result.error)}</div>` : ""}
+    </div>`;
+}
+
+function renderSettlementTile(settlements: SettlementSummary): string {
+  if (!settlements.available) {
+    return `
+    <div class="settlement-tile">
+      <div class="wallet-label">Settlement health</div>
+      <div class="wallet-value wallet-unavailable">not available</div>
+      <div class="wallet-sub">SETTLEMENTS KV not bound yet</div>
+    </div>`;
+  }
+
+  const hasFailures = settlements.failed > 0;
+  const color = hasFailures ? STATUS_COLORS.fail : STATUS_COLORS.pass;
+  const truncatedNote = settlements.truncated
+    ? `<div class="wallet-sub">showing a partial scan (hit the scan cap)</div>`
+    : "";
+
+  return `
+    <div class="settlement-tile" style="border-left-color: ${color}">
+      <div class="wallet-label">Settlement health (last ${settlements.windowHours}h)</div>
+      <div class="settlement-counts">
+        <span class="settlement-count" style="color: ${STATUS_COLORS.pass}">${settlements.settled} settled</span>
+        <span class="separator">&middot;</span>
+        <span class="settlement-count" style="color: ${hasFailures ? STATUS_COLORS.fail : "inherit"}">${settlements.failed} failed</span>
+        <span class="separator">&middot;</span>
+        <span class="settlement-count">${settlements.pending} pending</span>
+      </div>
+      ${truncatedNote}
+    </div>`;
+}
+
 function renderTargetSelector(
   activeTarget: string,
   availableTargets: string[],
@@ -92,14 +162,22 @@ function renderSummary(summary: ProbeReport["summary"]): string {
 export function renderDashboard(
   report: ProbeReport,
   availableTargets: string[],
+  settlements: SettlementSummary,
 ): string {
   const hasFail = report.summary.fail > 0;
-  const titlePrefix = hasFail ? "\u2717" : "\u2713";
+  const titlePrefix = hasFail ? "✗" : "✓";
   const overallColor = hasFail ? STATUS_COLORS.fail : STATUS_COLORS.pass;
   const faviconColor = hasFail ? "%23ef4444" : "%2322c55e";
   const faviconSvg = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='${faviconColor}'/></svg>`;
 
-  const probeRows = report.results.map(renderProbeRow).join("");
+  const gasResult = report.results.find((r) => r.name === "gas-estimate");
+  const usdcResult = report.results.find((r) => r.name === "usdc-balance");
+  const walletTiles = `${renderWalletTile("Facilitator gas (ETH)", gasResult, "ETH", "balanceEth")}${renderWalletTile("Operator revenue (USDC)", usdcResult, "USDC", "balanceUsdc")}${renderSettlementTile(settlements)}`;
+
+  const probeRows = report.results
+    .filter((r) => !WALLET_PROBE_NAMES.has(r.name))
+    .map(renderProbeRow)
+    .join("");
   const targetSelector = renderTargetSelector(report.target, availableTargets);
   const summaryHtml = renderSummary(report.summary);
 
@@ -124,8 +202,8 @@ export function renderDashboard(
       font-family: -apple-system, system-ui, 'Segoe UI', sans-serif;
       line-height: 1.5;
       min-height: 100vh;
-      padding: 2rem 1rem;
-      padding-top: 4.5rem;
+      padding: 1rem;
+      padding-top: 4rem;
     }
 
     nav {
@@ -143,7 +221,7 @@ export function renderDashboard(
     nav .inner {
       max-width: 1080px;
       margin: 0 auto;
-      padding: 0 2rem;
+      padding: 0 1rem;
       height: 52px;
       display: flex;
       align-items: center;
@@ -161,7 +239,7 @@ export function renderDashboard(
 
     .nav-links {
       display: flex;
-      gap: 24px;
+      gap: 16px;
     }
 
     .nav-links a {
@@ -177,16 +255,17 @@ export function renderDashboard(
       color: #fafafa;
     }
 
+    /* Mobile-first: everything is a single column by default. */
     .container {
-      max-width: 680px;
+      max-width: 520px;
       margin: 0 auto;
     }
 
     h1 {
-      font-size: 1.5rem;
+      font-size: 1.25rem;
       font-weight: 600;
       color: #fafafa;
-      margin-bottom: 1.25rem;
+      margin-bottom: 1rem;
     }
 
     .header-row {
@@ -194,10 +273,11 @@ export function renderDashboard(
       align-items: center;
       gap: 0.5rem;
       margin-bottom: 0.75rem;
+      flex-wrap: wrap;
     }
 
     .header-label {
-      font-size: 0.8125rem;
+      font-size: 0.75rem;
       color: #737373;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -206,12 +286,13 @@ export function renderDashboard(
     .target-selector {
       display: flex;
       gap: 0.25rem;
+      flex-wrap: wrap;
     }
 
     .target-link {
       font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
       font-size: 0.8125rem;
-      padding: 0.25rem 0.625rem;
+      padding: 0.375rem 0.625rem;
       border-radius: 4px;
       text-decoration: none;
       color: #a3a3a3;
@@ -233,7 +314,7 @@ export function renderDashboard(
 
     .timestamp {
       font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-      font-size: 0.75rem;
+      font-size: 0.6875rem;
       color: #525252;
       margin-bottom: 1rem;
     }
@@ -241,7 +322,7 @@ export function renderDashboard(
     .summary {
       font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
       font-size: 0.875rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
       padding: 0.75rem 1rem;
       background: #141414;
       border: 1px solid #222;
@@ -252,6 +333,72 @@ export function renderDashboard(
     .separator {
       color: #404040;
       margin: 0 0.125rem;
+    }
+
+    /* Wallet + settlement tiles: single column, stacked, largest thing on
+       the page — the mobile-first "glance at the phone" surface. */
+    .wallet-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.625rem;
+      margin-bottom: 1rem;
+    }
+
+    @media (min-width: 640px) {
+      .wallet-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .wallet-tile, .settlement-tile {
+      background: #141414;
+      border: 1px solid #222;
+      border-left: 3px solid #404040;
+      border-radius: 8px;
+      padding: 0.875rem 1rem;
+    }
+
+    .wallet-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: #a3a3a3;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.375rem;
+    }
+
+    .wallet-value {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 1.375rem;
+      font-weight: 600;
+      color: #fafafa;
+      word-break: break-word;
+    }
+
+    .wallet-unavailable {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .wallet-sub {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.6875rem;
+      color: #525252;
+      margin-top: 0.375rem;
+    }
+
+    .settlement-counts {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 1rem;
+      font-weight: 600;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
     }
 
     .probes {
@@ -275,6 +422,7 @@ export function renderDashboard(
       align-items: center;
       justify-content: space-between;
       gap: 1rem;
+      flex-wrap: wrap;
     }
 
     .probe-name {
@@ -282,7 +430,7 @@ export function renderDashboard(
       align-items: center;
       gap: 0.5rem;
       font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-      font-size: 0.875rem;
+      font-size: 0.8125rem;
       font-weight: 500;
       color: #e5e5e5;
     }
@@ -297,13 +445,14 @@ export function renderDashboard(
     .probe-right {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 0.625rem;
       flex-shrink: 0;
+      padding-left: 1.25rem;
     }
 
     .status-badge {
       font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-      font-size: 0.75rem;
+      font-size: 0.6875rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -311,9 +460,9 @@ export function renderDashboard(
 
     .latency {
       font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-      font-size: 0.75rem;
+      font-size: 0.6875rem;
       color: #525252;
-      min-width: 48px;
+      min-width: 44px;
       text-align: right;
     }
 
@@ -344,13 +493,11 @@ export function renderDashboard(
     }
 
     .footer {
-      margin-top: 1.5rem;
+      margin-top: 1.25rem;
       font-size: 0.75rem;
       color: #404040;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
+      flex-direction: column;
       gap: 0.5rem;
     }
 
@@ -358,44 +505,23 @@ export function renderDashboard(
       color: #525252;
       text-decoration: none;
       font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      word-break: break-all;
     }
 
     .footer a:hover {
       color: #737373;
     }
 
-    @media (max-width: 480px) {
-      body {
-        padding: 1rem 0.75rem;
-        padding-top: 4.5rem;
-      }
-
-      nav .inner {
-        padding: 0 0.75rem;
-      }
-
-      h1 {
-        font-size: 1.25rem;
-      }
-
-      .probe-header {
-        flex-wrap: wrap;
-        gap: 0.375rem;
-      }
-
-      .probe-right {
-        padding-left: 1.25rem;
-      }
-
-      .footer {
-        flex-direction: column;
-        align-items: flex-start;
-      }
+    @media (min-width: 640px) {
+      body { padding: 2rem 1rem; padding-top: 4.5rem; }
+      h1 { font-size: 1.5rem; }
+      .container { max-width: 680px; }
+      .footer { flex-direction: row; justify-content: space-between; align-items: center; }
     }
   </style>
 </head>
 <body>
-  <nav><div class="inner"><a href="https://x402cloud.ai" class="wordmark">x402cloud.ai</a><div class="nav-links"><a href="https://x402cloud.ai/#services">Services</a><a href="https://x402cloud.ai/#packages">Packages</a><a href="/">Status</a><a href="https://github.com/x402cloud/x402cloud">GitHub</a><a href="https://x402cloud.ai/llms.txt">Docs</a></div></div></nav>
+  <nav><div class="inner"><a href="https://x402cloud.ai" class="wordmark">x402cloud.ai</a><div class="nav-links"><a href="https://x402cloud.ai/#services">Services</a><a href="/">Status</a><a href="https://github.com/x402cloud/x402cloud">GitHub</a></div></div></nav>
   <div class="container">
     <h1>x402cloud status</h1>
 
@@ -407,6 +533,10 @@ export function renderDashboard(
     <div class="timestamp">Last checked: ${escapeHtml(report.timestamp)}</div>
 
     <div class="summary">Summary: ${summaryHtml}</div>
+
+    <div class="wallet-grid">
+      ${walletTiles}
+    </div>
 
     <div class="probes">
       ${probeRows}

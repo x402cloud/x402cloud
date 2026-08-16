@@ -272,6 +272,9 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@22.19.11)(tsx@4.21.0)
       wrangler:
         specifier: ^4.0.0
         version: 4.68.0(@cloudflare/workers-types@4.20260302.0)

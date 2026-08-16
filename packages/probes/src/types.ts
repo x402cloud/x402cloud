@@ -22,6 +22,9 @@ export type Target = {
   infer: string | null;
   network: string;
   facilitatorAddress?: string;
+  /** The operator/revenue address that accumulates settled USDC. Defaults
+   * to the facilitator's own address when unset (see `resolveFacilitatorAddress`). */
+  operatorAddress?: string;
 };
 
 export type Probe = (target: Target) => Promise<ProbeResult>;

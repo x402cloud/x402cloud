@@ -1,4 +1,5 @@
 import { wrapProbe } from "../wrap.js";
+import { resolveFacilitatorAddress } from "./address.js";
 
 // Warn threshold per docs/MAINNET-RUNBOOK.md §7: warn when the facilitator
 // gas wallet drops below 0.01 ETH (a few hundred settlements of headroom).
@@ -9,34 +10,11 @@ export const gasEstimate = wrapProbe("gas-estimate", async (target, signal) => {
     return { name: "gas-estimate", status: "skip" };
   }
 
-  // Get facilitator address from /supported endpoint (or use target override)
-  let address = target.facilitatorAddress;
-
-  if (!address) {
-    const supportedResponse = await fetch(`${target.facilitator}/supported`, { signal });
-
-    if (!supportedResponse.ok) {
-      return {
-        name: "gas-estimate",
-        status: "fail",
-        error: `Could not fetch facilitator address: ${supportedResponse.status}`,
-      };
-    }
-
-    const supported = (await supportedResponse.json()) as {
-      address?: string;
-      facilitator?: string;
-    };
-    address = supported.facilitator ?? supported.address;
+  const resolved = await resolveFacilitatorAddress(target, signal);
+  if (!resolved.ok) {
+    return { name: "gas-estimate", status: "fail", error: resolved.error };
   }
-
-  if (!address) {
-    return {
-      name: "gas-estimate",
-      status: "fail",
-      error: "Facilitator did not return an address",
-    };
-  }
+  const address = resolved.address;
 
   // Check ETH balance via JSON-RPC
   const balanceResponse = await fetch(target.rpc, {

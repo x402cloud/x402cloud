@@ -5,3 +5,30 @@ compatibility_date = "2025-01-01"
 [route]
 pattern = "status.x402cloud.ai"
 custom_domain = true
+
+# Drives the read-only alert check (workspace#43): re-runs every probe plus
+# the settlement summary and POSTs to ALERT_WEBHOOK_URL (a secret, set
+# below) if anything looks wrong. Every 15 minutes.
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Read-only settlement health (workspace#43). Bind the SAME namespace
+# apps/infer's SETTLEMENTS binding uses (see apps/infer/wrangler.toml) so
+# this worker can summarise the last 24h of settlement records — it only
+# ever calls list()/get() on it, never put()/delete(). Commented out
+# because a placeholder id breaks `wrangler deploy`; the settlement-health
+# tile and the settlement-failure-spike alert both degrade to "not
+# available" while this is absent, which is the safe default today (the
+# namespace doesn't exist yet — see docs/PRODUCTION-READINESS.md #5).
+#
+# Once apps/infer's SETTLEMENTS namespace exists (or after creating it
+# fresh with the command below), paste its id here and uncomment:
+#   CLOUDFLARE_ACCOUNT_ID=331224f43e4f448483cad2f1185ea965 \
+#     npx wrangler kv namespace create SETTLEMENTS
+# [[kv_namespaces]]
+# binding = "SETTLEMENTS"
+# id = "<paste id from `wrangler kv namespace create SETTLEMENTS`, or reuse infer's>"
+
+# ALERT_WEBHOOK_URL is a secret, not a var — never put it in this file.
+# Set it with: wrangler secret put ALERT_WEBHOOK_URL
+# (an ntfy.sh topic URL or similar; POSTed a plain-text summary on alert)
