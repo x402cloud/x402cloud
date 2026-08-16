@@ -59,19 +59,20 @@ type InferRow = {
  *   embed: QUOTE_EMBED_TOKENS input (max context)
  *   image: 1 generation at 1024x1024, 4 steps
  */
+/**
+ * One wholesale-cost calculator per `InferModelKind` — adding a kind is one
+ * map entry, not a new `if` branch.
+ */
+const WHOLESALE_COST_BY_KIND: Record<InferModelKind, (neurons: NeuronRate) => string> = {
+  image: () => wholesaleImageCost(IMAGE_NEURONS_PER_GEN),
+  embed: (neurons) => wholesaleEmbedCost(neurons, QUOTE_EMBED_TOKENS),
+  text: (neurons) => wholesaleTextCost(neurons, QUOTE_INPUT_TOKENS, QUOTE_OUTPUT_TOKENS),
+};
+
 function maxPriceFor(row: InferRow, marginBps: number): string {
   const neurons = INFER_NEURONS[row.key];
   if (!neurons) throw new Error(`No neuron rate for infer model: ${row.key}`);
-  if (row.kind === "image") {
-    return retailDisplay(wholesaleImageCost(IMAGE_NEURONS_PER_GEN), marginBps);
-  }
-  if (row.kind === "embed") {
-    return retailDisplay(wholesaleEmbedCost(neurons, QUOTE_EMBED_TOKENS), marginBps);
-  }
-  return retailDisplay(
-    wholesaleTextCost(neurons, QUOTE_INPUT_TOKENS, QUOTE_OUTPUT_TOKENS),
-    marginBps,
-  );
+  return retailDisplay(WHOLESALE_COST_BY_KIND[row.kind](neurons), marginBps);
 }
 
 const INFER_ROWS: ReadonlyArray<InferRow> = Object.freeze([

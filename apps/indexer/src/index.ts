@@ -2,12 +2,12 @@ import { scanBlocksViaLogs } from "./scan-logs.js";
 import { writeRecords } from "./write.js";
 import { getBlockNumber } from "./rpc.js";
 import { NETWORKS } from "./constants.js";
+import type { NetworkConfig } from "./types.js";
 
 type Env = {
   ANALYTICS: R2Bucket;
   CURSOR: KVNamespace;
-  BASE_RPC_URL?: string;
-  BASE_SEPOLIA_RPC_URL?: string;
+  [envVar: string]: unknown;
 };
 
 /** Max blocks to process per cron run per network (stays within CPU limits). */
@@ -16,17 +16,16 @@ const MAX_BLOCKS_PER_RUN = 5000;
 /** Finality buffer: skip the most recent block to avoid reorgs. */
 const FINALITY_BUFFER = 1;
 
-function getRpcUrl(env: Env, networkKey: string, defaultRpc: string): string {
-  if (networkKey === "base" && env.BASE_RPC_URL) return env.BASE_RPC_URL;
-  if (networkKey === "base-sepolia" && env.BASE_SEPOLIA_RPC_URL) return env.BASE_SEPOLIA_RPC_URL;
-  return defaultRpc;
+function getRpcUrl(env: Env, config: NetworkConfig): string {
+  const override = env[config.rpcEnvVar];
+  return typeof override === "string" && override ? override : config.rpc;
 }
 
 async function indexNetwork(env: Env, networkKey: string): Promise<void> {
   const config = NETWORKS[networkKey];
   if (!config) return;
 
-  const rpcUrl = getRpcUrl(env, networkKey, config.rpc);
+  const rpcUrl = getRpcUrl(env, config);
   const cursorKey = `cursor:${networkKey}`;
   const storedCursor = await env.CURSOR.get(cursorKey);
   const lastBlock = storedCursor ? parseInt(storedCursor, 10) : config.startBlock;

@@ -11,6 +11,8 @@ export type NetworkConfig = {
   rpc: string;
   usdc: string;
   startBlock: number;
+  /** Env var name whose value overrides `rpc` when set (data over if-chains). */
+  rpcEnvVar: string;
 };
 
 export type RpcBlock = {

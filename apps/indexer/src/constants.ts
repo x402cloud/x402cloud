@@ -22,6 +22,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     // First CDP facilitator tx was May 5, 2025 (~block 29.5M)
     startBlock: 29_000_000,
+    rpcEnvVar: "BASE_RPC_URL",
   },
   "base-sepolia": {
     name: "base-sepolia",
@@ -29,5 +30,6 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     rpc: "https://sepolia.base.org",
     usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     startBlock: 22_000_000,
+    rpcEnvVar: "BASE_SEPOLIA_RPC_URL",
   },
 };

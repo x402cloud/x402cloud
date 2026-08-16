@@ -1,6 +1,6 @@
-import type { MeterFunction } from "@x402cloud/protocol";
+import type { MeterFunction, ModelType } from "@x402cloud/protocol";
 import { retailPrice, DEFAULT_MARGIN_BPS } from "@x402cloud/middleware";
-import { MODELS } from "./models.js";
+import { MODELS, type ModelConfig } from "./models.js";
 import { resolveModel, type OpenAIEndpoint } from "./openai.js";
 import {
   wholesaleTextCost,
@@ -15,6 +15,84 @@ import {
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
+
+type WholesaleExtractorArgs = {
+  config: ModelConfig;
+  request: Request;
+  response: Response;
+};
+
+/** Computes the wholesale USDC cost (in micro-USDC) for one model kind. */
+type WholesaleExtractor = (args: WholesaleExtractorArgs) => Promise<string>;
+
+/**
+ * One extractor per `ModelType` — adding a model kind (e.g. audio) is one map
+ * entry, not a new `if`/`else` branch in `createMeter`.
+ */
+const WHOLESALE_EXTRACTORS: Record<ModelType, WholesaleExtractor> = {
+  image: async () => wholesaleImageCost(),
+
+  embed: async ({ config, request }) => {
+    const reqBody = (await request
+      .clone()
+      .json()
+      .catch(() => ({}))) as Record<string, unknown>;
+    const input = (reqBody.input as unknown) ?? (reqBody.text as unknown) ?? "";
+    const texts = (Array.isArray(input) ? input : [input]) as unknown[];
+    const inputTokens = texts.reduce<number>(
+      (sum, t) => sum + estimateTokens(typeof t === "string" ? t : ""),
+      0,
+    );
+    return wholesaleEmbedCost(config.neurons, inputTokens);
+  },
+
+  text: async ({ config, request, response }) => {
+    const reqBody = (await request
+      .clone()
+      .json()
+      .catch(() => ({}))) as Record<string, unknown>;
+    const resBody = (await response
+      .clone()
+      .json()
+      .catch(() => ({}))) as Record<string, unknown>;
+
+    const usage = resBody.usage as
+      | { prompt_tokens?: number; completion_tokens?: number }
+      | undefined;
+    let inputTokens: number;
+    let outputTokens: number;
+
+    if (
+      usage &&
+      typeof usage.prompt_tokens === "number" &&
+      typeof usage.completion_tokens === "number"
+    ) {
+      inputTokens = usage.prompt_tokens;
+      outputTokens = usage.completion_tokens;
+    } else {
+      const messages = (reqBody.messages as Array<{ content?: unknown }> | undefined) ?? [];
+      const inputText = messages
+        .map((m) => (typeof m?.content === "string" ? m.content : ""))
+        .join(" ");
+      inputTokens = estimateTokens(inputText);
+
+      const choices = resBody.choices as
+        | Array<{ message?: { content?: unknown } }>
+        | undefined;
+      const choiceContent = choices?.[0]?.message?.content;
+      const fallbackResponse = resBody.response;
+      const outputText =
+        typeof choiceContent === "string"
+          ? choiceContent
+          : typeof fallbackResponse === "string"
+          ? fallbackResponse
+          : "";
+      outputTokens = estimateTokens(outputText);
+    }
+
+    return wholesaleTextCost(config.neurons, inputTokens, outputTokens);
+  },
+};
 
 /**
  * Create a meter function for a specific model.
@@ -39,71 +117,10 @@ export function createMeter(
   const config = MODELS[modelName];
   if (!config) throw new Error(`Unknown model: ${modelName}`);
 
+  const extractWholesale = WHOLESALE_EXTRACTORS[config.type];
+
   return async ({ request, response, authorizedAmount }) => {
-    let wholesale: string;
-
-    if (config.type === "image") {
-      wholesale = wholesaleImageCost();
-    } else if (config.type === "embed") {
-      const reqBody = (await request
-        .clone()
-        .json()
-        .catch(() => ({}))) as Record<string, unknown>;
-      const input = (reqBody.input as unknown) ?? (reqBody.text as unknown) ?? "";
-      const texts = (Array.isArray(input) ? input : [input]) as unknown[];
-      const inputTokens = texts.reduce<number>(
-        (sum, t) => sum + estimateTokens(typeof t === "string" ? t : ""),
-        0,
-      );
-      wholesale = wholesaleEmbedCost(config.neurons, inputTokens);
-    } else {
-      // Text model: estimate from request + response
-      const reqBody = (await request
-        .clone()
-        .json()
-        .catch(() => ({}))) as Record<string, unknown>;
-      const resBody = (await response
-        .clone()
-        .json()
-        .catch(() => ({}))) as Record<string, unknown>;
-
-      const usage = resBody.usage as
-        | { prompt_tokens?: number; completion_tokens?: number }
-        | undefined;
-      let inputTokens: number;
-      let outputTokens: number;
-
-      if (
-        usage &&
-        typeof usage.prompt_tokens === "number" &&
-        typeof usage.completion_tokens === "number"
-      ) {
-        inputTokens = usage.prompt_tokens;
-        outputTokens = usage.completion_tokens;
-      } else {
-        const messages = (reqBody.messages as Array<{ content?: unknown }> | undefined) ?? [];
-        const inputText = messages
-          .map((m) => (typeof m?.content === "string" ? m.content : ""))
-          .join(" ");
-        inputTokens = estimateTokens(inputText);
-
-        const choices = resBody.choices as
-          | Array<{ message?: { content?: unknown } }>
-          | undefined;
-        const choiceContent = choices?.[0]?.message?.content;
-        const fallbackResponse = resBody.response;
-        const outputText =
-          typeof choiceContent === "string"
-            ? choiceContent
-            : typeof fallbackResponse === "string"
-            ? fallbackResponse
-            : "";
-        outputTokens = estimateTokens(outputText);
-      }
-
-      wholesale = wholesaleTextCost(config.neurons, inputTokens, outputTokens);
-    }
-
+    const wholesale = await extractWholesale({ config, request, response });
     return retailPrice(wholesale, authorizedAmount, marginBps);
   };
 }
