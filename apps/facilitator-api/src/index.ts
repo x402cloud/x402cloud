@@ -10,6 +10,8 @@ import {
 } from "@x402cloud/protocol";
 import type { UptoPayload, ExactPayload } from "@x402cloud/evm";
 import { CHAINS } from "@x402cloud/evm";
+import type { ServiceMeta, ServiceRoute, ServiceSkill } from "@x402cloud/discovery";
+import { mountDiscovery } from "@x402cloud/discovery/hono";
 import { landingPageHtml } from "./html.js";
 import {
   durableObjectCoordinator,
@@ -41,6 +43,166 @@ type Bindings = {
   /** Queue producer for transient-failure settlement retries. */
   SETTLE_QUEUE: { send(body: RetryJob): Promise<void> };
 };
+
+const BASE_URL = "https://facilitator.x402cloud.ai";
+
+// --- Discovery data (drives /llms.txt, /robots.txt, /sitemap.xml,
+// /.well-known/agent-card.json, /.well-known/api-catalog via mountDiscovery,
+// plus the bonus /openapi.json + /agents.json that come for free). ---
+//
+// These routes aren't x402-priced (no `payment` block) — the facilitator
+// gates /verify*/settle* with a bearer token (FACILITATOR_API_TOKEN), not a
+// per-call x402 payment, so ServiceRoute.payment is intentionally omitted and
+// skills are supplied explicitly rather than derived from `payment`.
+//
+// The narrative facts that the old hand-written llms.txt carried but that
+// have no dedicated ServiceMeta/ServiceRoute field (self-host Docker command,
+// integration code sample, source repo link) are folded into `description`
+// below so they still surface in llms.txt and openapi.json#info.description
+// — nothing is silently dropped. The one exception: the old llms.txt embedded
+// the *live* `NETWORK`/`OUR_ADDRESS` values read from `c.env` per request;
+// `ServiceMeta` is static (built once, not per-request), so those dynamic
+// values are no longer inlined into llms.txt — they remain discoverable
+// exactly as before via `GET /supported`, which still reads live env.
+
+const REQUEST_BODY_NOTE =
+  "Request/response JSON Schemas for every endpoint are in GET /openapi.json.";
+
+const DISCOVERY_META: ServiceMeta = {
+  name: "facilitator.x402cloud.ai",
+  description:
+    "x402 protocol facilitator — verify and settle USDC micropayments on-chain. " +
+    "Verifies Permit2-signed USDC payments and settles them on-chain so x402 " +
+    "middleware can handle payment verification without servers needing " +
+    "private keys. Supports both exact (fixed-price) and upto (metered) " +
+    "payment schemes. " +
+    "Self-host: also available as a Docker image — " +
+    "`docker run -e FACILITATOR_PRIVATE_KEY=0x... -e RPC_URL=https://mainnet.base.org " +
+    "-e NETWORK=eip155:8453 -p 3000:3000 ghcr.io/x402cloud/facilitator`. " +
+    "Integration: servers use @x402cloud/middleware with a facilitator URL " +
+    "(`remoteExactPaymentMiddleware(routes, \"https://facilitator.x402cloud.ai\")`); " +
+    "the middleware calls /verify-exact on each request and /settle-exact after " +
+    "successful responses (the /verify + /settle pair for the upto scheme). " +
+    `${REQUEST_BODY_NOTE} Source: https://github.com/x402cloud/x402cloud`,
+  baseUrl: BASE_URL,
+  version: "0.1.0",
+  contactUrl: "https://x402cloud.ai",
+};
+
+const DISCOVERY_ROUTES: ServiceRoute[] = [
+  {
+    path: "/supported",
+    method: "GET",
+    operationId: "getSupported",
+    summary: "Supported schemes, networks, and facilitator address. No auth required.",
+    tags: ["facilitator"],
+    kind: "facilitator",
+    responseSchema: {
+      type: "object",
+      properties: {
+        schemes: { type: "array", items: { type: "string" } },
+        networks: { type: "array", items: { type: "string" } },
+        facilitator: { type: "string" },
+      },
+    },
+  },
+  {
+    path: "/verify",
+    method: "POST",
+    operationId: "verifyUpto",
+    summary: "Verify an upto (metered) payment payload against requirements. Requires bearer auth.",
+    tags: ["facilitator", "upto"],
+    kind: "facilitator",
+    requestSchema: {
+      type: "object",
+      required: ["payload", "requirements"],
+      properties: {
+        payload: { type: "object", description: "Signed Permit2 upto payment payload" },
+        requirements: { type: "object", description: "Payment requirements to verify against" },
+      },
+    },
+    responseSchema: {
+      type: "object",
+      properties: { isValid: { type: "boolean" }, invalidReason: { type: "string" } },
+    },
+    extraResponses: { "401": { description: "Missing or invalid bearer token" } },
+    examples: ['POST /verify with { "payload": { ... }, "requirements": { ... } }'],
+  },
+  {
+    path: "/settle",
+    method: "POST",
+    operationId: "settleUpto",
+    summary: "Settle an upto payment on-chain for the metered amount. Requires bearer auth.",
+    tags: ["facilitator", "upto"],
+    kind: "facilitator",
+    requestSchema: {
+      type: "object",
+      required: ["payload", "settlementAmount"],
+      properties: {
+        payload: { type: "object", description: "Signed Permit2 upto payment payload" },
+        requirements: { type: "object", description: "Payment requirements the payload was verified against" },
+        settlementAmount: { type: "string", description: "Actual metered usage cost, <= the authorized amount" },
+      },
+    },
+    responseSchema: {
+      type: "object",
+      properties: { success: { type: "boolean" }, txHash: { type: "string" }, errorReason: { type: "string" } },
+    },
+    extraResponses: { "401": { description: "Missing or invalid bearer token" } },
+    examples: ['POST /settle with { "payload": { ... }, "requirements": { ... }, "settlementAmount": "1000000" }'],
+  },
+  {
+    path: "/verify-exact",
+    method: "POST",
+    operationId: "verifyExact",
+    summary: "Verify an exact (fixed-price) payment payload against requirements. Requires bearer auth.",
+    tags: ["facilitator", "exact"],
+    kind: "facilitator",
+    requestSchema: {
+      type: "object",
+      required: ["payload", "requirements"],
+      properties: {
+        payload: { type: "object", description: "Signed Permit2 exact payment payload" },
+        requirements: { type: "object", description: "Payment requirements to verify against" },
+      },
+    },
+    responseSchema: {
+      type: "object",
+      properties: { isValid: { type: "boolean" }, invalidReason: { type: "string" } },
+    },
+    extraResponses: { "401": { description: "Missing or invalid bearer token" } },
+    examples: ['POST /verify-exact with { "payload": { ... }, "requirements": { ... } }'],
+  },
+  {
+    path: "/settle-exact",
+    method: "POST",
+    operationId: "settleExact",
+    summary: "Settle an exact payment on-chain for the full authorized amount. Requires bearer auth.",
+    tags: ["facilitator", "exact"],
+    kind: "facilitator",
+    requestSchema: {
+      type: "object",
+      required: ["payload", "requirements"],
+      properties: {
+        payload: { type: "object", description: "Signed Permit2 exact payment payload" },
+        requirements: { type: "object", description: "Payment requirements the payload was verified against" },
+      },
+    },
+    responseSchema: {
+      type: "object",
+      properties: { success: { type: "boolean" }, txHash: { type: "string" }, errorReason: { type: "string" } },
+    },
+    extraResponses: { "401": { description: "Missing or invalid bearer token" } },
+    examples: ['POST /settle-exact with { "payload": { ... }, "requirements": { ... } }'],
+  },
+];
+
+const DISCOVERY_SKILLS: ServiceSkill[] = [
+  { id: "verify", name: "Verify Upto Payment", description: "Verify an upto payment payload", tags: ["facilitator", "upto", "x402"] },
+  { id: "settle", name: "Settle Upto Payment", description: "Settle an upto payment on-chain via Permit2", tags: ["facilitator", "upto", "x402"] },
+  { id: "verify-exact", name: "Verify Exact Payment", description: "Verify an exact (fixed-price) payment payload", tags: ["facilitator", "exact", "x402"] },
+  { id: "settle-exact", name: "Settle Exact Payment", description: "Settle an exact payment on-chain via Permit2", tags: ["facilitator", "exact", "x402"] },
+];
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -105,129 +267,12 @@ app.get("/", (c) => {
   });
 });
 
-app.get("/llms.txt", (c) => {
-  return c.text(`# facilitator.x402cloud.ai
-
-x402 payment facilitator — verify and settle USDC micropayments on-chain.
-
-## What This Is
-
-A hosted facilitator service for the x402 payment protocol. It verifies Permit2-signed USDC payments and settles them on-chain. Used by x402 middleware to handle payment verification without servers needing private keys.
-
-Supports both exact (fixed-price) and upto (metered) payment schemes.
-
-## Self-Host
-
-This facilitator is also available as a Docker image for self-hosting:
-docker run -e FACILITATOR_PRIVATE_KEY=0x... -e RPC_URL=https://mainnet.base.org -e NETWORK=eip155:8453 -p 3000:3000 ghcr.io/x402cloud/facilitator
-
-## Network
-
-- Network: ${c.env.NETWORK}
-- Facilitator address: ${c.env.OUR_ADDRESS}
-- Token: USDC
-- Schemes: exact, upto
-
-## Endpoints
-
-### GET /health
-Health check. Returns {"status":"ok"}.
-
-### GET /supported
-Returns supported schemes, networks, and facilitator address. No auth required.
-
-### POST /verify (auth required)
-Verify an upto payment payload against requirements.
-Request body:
-\`\`\`json
-{ "payload": { ... }, "requirements": { ... } }
-\`\`\`
-Returns: { "isValid": true } or { "isValid": false, "invalidReason": "..." }
-
-### POST /settle (auth required)
-Settle an upto payment on-chain.
-Request body:
-\`\`\`json
-{ "payload": { ... }, "requirements": { ... }, "settlementAmount": "1000000" }
-\`\`\`
-Returns: { "success": true, "txHash": "0x..." } or { "success": false, "errorReason": "..." }
-
-### POST /verify-exact (auth required)
-Verify an exact (fixed-price) payment payload against requirements.
-Request body:
-\`\`\`json
-{ "payload": { ... }, "requirements": { ... } }
-\`\`\`
-Returns: { "isValid": true } or { "isValid": false, "invalidReason": "..." }
-
-### POST /settle-exact (auth required)
-Settle an exact payment on-chain (full authorized amount).
-Request body:
-\`\`\`json
-{ "payload": { ... }, "requirements": { ... } }
-\`\`\`
-Returns: { "success": true, "txHash": "0x..." } or { "success": false, "errorReason": "..." }
-
-## Integration
-
-Servers use @x402cloud/middleware with a facilitator URL:
-\`\`\`typescript
-import { remoteExactPaymentMiddleware } from "@x402cloud/middleware";
-app.use("/*", remoteExactPaymentMiddleware(routes, "https://facilitator.x402cloud.ai"));
-\`\`\`
-
-The middleware calls /verify-exact on each request and /settle-exact after successful responses.
-
-## Source
-
-https://github.com/x402cloud/x402cloud
-`);
-});
-
 // ── Health ───────────────────────────────────────────────────────────
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-app.get("/robots.txt", (c) => c.text(`User-agent: *\nAllow: /\n\nSitemap: https://facilitator.x402cloud.ai/sitemap.xml\n`));
-
-app.get("/sitemap.xml", (c) => {
-  const urls = ["/", "/health", "/supported", "/llms.txt", "/.well-known/agent-card.json"];
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map((u) => `  <url><loc>https://facilitator.x402cloud.ai${u}</loc></url>`).join("\n")}
-</urlset>`;
-  return c.body(xml, 200, { "Content-Type": "application/xml" });
-});
-
-app.get("/.well-known/agent-card.json", (c) => {
-  return c.json({
-    name: "facilitator.x402cloud.ai",
-    description: "x402 protocol facilitator — verify and settle USDC payments on-chain using the x402 standard",
-    url: "https://facilitator.x402cloud.ai",
-    version: "0.1.0",
-    capabilities: { streaming: false, pushNotifications: false },
-    defaultInputModes: ["application/json"],
-    defaultOutputModes: ["application/json"],
-    skills: [
-      { id: "verify", name: "Verify Upto Payment", description: "Verify an upto payment payload" },
-      { id: "settle", name: "Settle Upto Payment", description: "Settle an upto payment on-chain via Permit2" },
-      { id: "verify-exact", name: "Verify Exact Payment", description: "Verify an exact (fixed-price) payment payload" },
-      { id: "settle-exact", name: "Settle Exact Payment", description: "Settle an exact payment on-chain via Permit2" },
-    ],
-    authentication: { schemes: ["bearer"] },
-    documentationUrl: "https://facilitator.x402cloud.ai/llms.txt",
-    provider: { organization: "x402cloud.ai", url: "https://x402cloud.ai" },
-  });
-});
-
-app.get("/.well-known/api-catalog", (c) => {
-  return c.json({
-    linkset: [{
-      anchor: "https://facilitator.x402cloud.ai/",
-      "service-desc": [{ href: "https://facilitator.x402cloud.ai/llms.txt", type: "text/plain" }],
-      "service-doc": [{ href: "https://facilitator.x402cloud.ai/llms.txt", type: "text/plain" }],
-    }],
-  });
-});
+// ── Discovery surface (llms.txt, robots.txt, sitemap.xml, agent-card.json,
+// api-catalog — plus openapi.json + agents.json for free) ──────────────
+mountDiscovery(app, DISCOVERY_META, DISCOVERY_ROUTES, { skills: DISCOVERY_SKILLS });
 
 // ── Supported ────────────────────────────────────────────────────────
 app.get("/supported", (c) => {

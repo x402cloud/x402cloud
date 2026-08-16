@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@x402cloud/discovery": "workspace:*",
     "@x402cloud/evm": "workspace:*",
     "@x402cloud/facilitator": "workspace:*",
     "@x402cloud/protocol": "workspace:*",
