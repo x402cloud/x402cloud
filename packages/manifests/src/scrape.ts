@@ -1,5 +1,5 @@
 import type { MarketplaceService } from "@x402cloud/protocol";
-import { DEFAULT_MARGIN_BPS } from "@x402cloud/middleware";
+import { DEFAULT_MARGIN_BPS } from "@x402cloud/protocol";
 import { retailDisplay } from "./format.js";
 import { maxWholesaleCost } from "./scrape-pricing.js";
 import type { ManifestParams, ServiceManifestEntry } from "./types.js";

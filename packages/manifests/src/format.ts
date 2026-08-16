@@ -1,4 +1,4 @@
-import { applyMargin, DEFAULT_MARGIN_BPS } from "@x402cloud/middleware";
+import { applyMargin, DEFAULT_MARGIN_BPS } from "@x402cloud/protocol";
 
 /**
  * Convert micro-USDC (decimal string) to a 6-decimal USD display string

@@ -10,7 +10,7 @@
  * here, no base fee — micropayments stay micro.
  *
  * Callers (meter, models maxPrice) apply the marketplace margin once via
- * `retailPrice` / `applyMargin` from `@x402cloud/middleware`.
+ * `retailPrice` / `applyMargin` from `@x402cloud/protocol`.
  *
  * All arithmetic is BigInt over micro-USDC to avoid float drift. The image
  * model has a fractional neurons-per-generation (172.8), so we keep it

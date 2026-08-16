@@ -32,3 +32,5 @@ export {
 export type { ModelType } from "./models.js";
 
 export type { MarketplaceService, Catalog } from "./catalog.js";
+
+export { applyMargin, clampToAuthorized, retailPrice, DEFAULT_MARGIN_BPS } from "./margin.js";

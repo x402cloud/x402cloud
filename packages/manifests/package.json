@@ -30,8 +30,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@x402cloud/protocol": "workspace:^",
-    "@x402cloud/middleware": "workspace:^"
+    "@x402cloud/protocol": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

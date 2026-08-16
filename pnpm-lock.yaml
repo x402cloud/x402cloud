@@ -33,6 +33,9 @@ importers:
 
   apps/facilitator-api:
     dependencies:
+      '@x402cloud/discovery':
+        specifier: workspace:*
+        version: link:../../packages/discovery
       '@x402cloud/evm':
         specifier: workspace:*
         version: link:../../packages/evm
@@ -420,9 +423,6 @@ importers:
 
   packages/manifests:
     dependencies:
-      '@x402cloud/middleware':
-        specifier: workspace:^
-        version: link:../middleware
       '@x402cloud/protocol':
         specifier: workspace:^
         version: link:../protocol
