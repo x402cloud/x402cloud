@@ -16,14 +16,14 @@ export type Scheme = "exact" | "upto";
  * source of truth in memory. See DESIGN.md § The price field.
  */
 export type PaymentRequirements = {
-  scheme: Scheme;
-  network: Network;
-  asset: string;
+  readonly scheme: Scheme;
+  readonly network: Network;
+  readonly asset: string;
   /** Price in the asset's smallest units (USDC: 6 decimals), decimal string. */
-  amount: string;
-  payTo: string;
-  maxTimeoutSeconds: number;
-  extra?: Record<string, unknown>;
+  readonly amount: string;
+  readonly payTo: string;
+  readonly maxTimeoutSeconds: number;
+  readonly extra?: Readonly<Record<string, unknown>>;
 };
 
 /**
@@ -32,9 +32,9 @@ export type PaymentRequirements = {
  * nothing here is trusted until `parseRequirements` has looked at it.
  */
 export type PaymentRequirementsInput = Omit<PaymentRequirements, "amount"> & {
-  amount?: string;
+  readonly amount?: string;
   /** Legacy spelling of `amount`. Accepted on input, never canonical. */
-  maxAmount?: string;
+  readonly maxAmount?: string;
 };
 
 /** The result of parsing untrusted input: a value, or a reason it is not one. */
@@ -88,36 +88,41 @@ export function normalizeRequirements(
 
 /** Resource being paid for */
 export type ResourceInfo = {
-  url: string;
-  description?: string;
-  mimeType?: string;
+  readonly url: string;
+  readonly description?: string;
+  readonly mimeType?: string;
 };
 
 /** 402 response envelope */
 export type PaymentRequired = {
-  x402Version: number;
-  error?: string;
-  resource: ResourceInfo;
-  accepts: PaymentRequirements[];
+  readonly x402Version: number;
+  readonly error?: string;
+  readonly resource: ResourceInfo;
+  readonly accepts: readonly PaymentRequirements[];
 };
 
 /** Client's payment proof sent in header */
 export type PaymentPayload = {
-  x402Version: number;
-  resource: ResourceInfo;
-  accepted: PaymentRequirements;
-  payload: Record<string, unknown>;
+  readonly x402Version: number;
+  readonly resource: ResourceInfo;
+  readonly accepted: PaymentRequirements;
+  readonly payload: Readonly<Record<string, unknown>>;
 };
 
 /** Facilitator verification result */
 export type VerifyResponse =
-  | { isValid: true; payer: string }
-  | { isValid: false; invalidReason: string };
+  | { readonly isValid: true; readonly payer: string }
+  | { readonly isValid: false; readonly invalidReason: string };
 
 /** Facilitator settlement result */
 export type SettleResponse =
-  | { success: true; transaction: string; network: Network; settledAmount: string }
-  | { success: false; errorReason: string };
+  | {
+      readonly success: true;
+      readonly transaction: string;
+      readonly network: Network;
+      readonly settledAmount: string;
+    }
+  | { readonly success: false; readonly errorReason: string };
 
 /** Meter function: computes actual cost after request completes */
 export type MeterFunction = (ctx: {
@@ -129,29 +134,29 @@ export type MeterFunction = (ctx: {
 
 /** Route configuration for payment middleware */
 export type RouteConfig = {
-  scheme: Scheme;
-  network: Network;
-  asset?: string;
-  maxPrice: string;
-  payTo: string;
-  maxTimeoutSeconds?: number;
-  description?: string;
-  meter?: MeterFunction;
+  readonly scheme: Scheme;
+  readonly network: Network;
+  readonly asset?: string;
+  readonly maxPrice: string;
+  readonly payTo: string;
+  readonly maxTimeoutSeconds?: number;
+  readonly description?: string;
+  readonly meter?: MeterFunction;
 };
 
 export type RoutesConfig = Record<string, RouteConfig>;
 
 /** Canonical settlement event emitted after on-chain settlement */
 export type SettlementEvent = {
-  txHash: string;
-  blockNumber: number;
-  timestamp: number;
-  network: string;
-  scheme: string;
-  facilitator: string;
-  payer: string;
-  payee: string;
-  amount: string;
-  amountUsd: number;
-  token: string;
+  readonly txHash: string;
+  readonly blockNumber: number;
+  readonly timestamp: number;
+  readonly network: string;
+  readonly scheme: string;
+  readonly facilitator: string;
+  readonly payer: string;
+  readonly payee: string;
+  readonly amount: string;
+  readonly amountUsd: number;
+  readonly token: string;
 };
