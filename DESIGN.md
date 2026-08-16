@@ -79,13 +79,13 @@ other except through a package. Full rules in `CLAUDE.md` § Dependency Rules.
 
 ```
 1. Client → Server:  POST /endpoint (no payment)
-2. Server → Client:  402 + PaymentRequired (scheme, maxAmount, payTo, asset, network)
-3. Client:           Signs Permit2 authorization for up to maxAmount
+2. Server → Client:  402 + PaymentRequired (scheme, amount, payTo, asset, network)
+3. Client:           Signs Permit2 authorization covering the quoted amount
 4. Client → Server:  POST /endpoint + PAYMENT-SIGNATURE header
 5. Server:           Verify signature (no on-chain tx)
 6. Server:           Execute request (run inference, scrape, etc.)
 7. Server:           Meter actual usage → settlementAmount
-8. Server:           Settle on-chain for actual cost (≤ maxAmount)
+8. Server:           Settle on-chain for actual cost (≤ the quoted amount)
 9. Server → Client:  200 + X-Payment-Settled header
 ```
 
@@ -107,13 +107,49 @@ type PaymentRequirements = {
   scheme: Scheme;             // "exact" | "upto"
   network: Network;           // CAIP-2, e.g. "eip155:8453"
   asset: string;              // token contract address
-  maxAmount: string;
+  amount: string;             // price in smallest units — the x402 v2 spec field
   payTo: string;
   maxTimeoutSeconds: number;
   extra?: Record<string, unknown>;  // upto scheme carries `extra.facilitator` here —
                                       // the address allowed to settle (witness-bound)
 };
+
+// What arrived from outside and has not been parsed yet. Distinct type, so the
+// compiler can tell "an offer someone sent us" from "an offer we have checked".
+type PaymentRequirementsInput = Omit<PaymentRequirements, "amount"> & {
+  amount?: string;
+  maxAmount?: string;   // legacy spelling, accepted on input
+};
+
+parseRequirements(input): { ok: true; value: PaymentRequirements } | { ok: false; error: string }
 ```
+
+### The price field
+
+There is **one** price field in memory: `amount`, spelled the way the x402 v2 specification
+spells it. The wire carries a second copy under this implementation's original name,
+`maxAmount`, so clients pinned to the old spelling keep working.
+
+That mirror is produced in exactly one place — `toWireRequirements` /
+`toWirePaymentRequired` in `packages/protocol/src/headers.ts`, applied when a 402 body or a
+`PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE` header is serialized — and removed in exactly one
+place, `parseRequirements`. No other module reads or writes `maxAmount`.
+
+`parseRequirements` prefers `amount` and **rejects** a payload whose two spellings disagree.
+A remote server showing a budget guard one price while asking to be paid another is refused,
+not reconciled.
+
+**Retirement plan.** The mirror is a compatibility shim with an end date, not a second
+canonical name:
+
+| Date | Step |
+|---|---|
+| 2026-08-16 | Collapsed to `amount` internally; `maxAmount` becomes wire-only (this change). |
+| Mainnet launch | Stop emitting `maxAmount` on **new** schemes; keep it on `upto`/`exact`. |
+| 2027-02-16 (≥6 months after the last published package emitting it) | Delete `toWireRequirements`, its two call sites, and the `maxAmount` branch of `parseRequirements`. Inputs carrying only `maxAmount` then fail to parse with "requirements has no price". |
+
+Bring the date forward if telemetry shows no client sending `maxAmount`-only offers. Do not
+push it back without adding a row here saying why.
 
 **`UptoPayload`** (`@x402cloud/evm`) — the client's signed authorization, immutable once
 signed:
@@ -139,8 +175,12 @@ type UptoWitness = { to: `0x${string}`; facilitator: `0x${string}`; validAfter: 
 ```
 
 The settlement amount is a separate argument to `settleUpto()` — never mutated onto the
-payload — which is what lets the server settle for less than the authorized `maxAmount`
-(the "upto" in the scheme name) without re-signing anything.
+payload — which is what lets the server settle for less than the quoted `amount` (the
+"upto" in the scheme name) without re-signing anything. Less, never more: the quote is a
+ceiling, enforced independently in `packages/middleware/src/core.ts` (clamps the metered
+amount) and in `settleUpto` (rejects `settlement_exceeds_quote`). The payer's signed budget
+`permitted.amount` is a separate, weaker bound — agent wallets authorize far more than one
+call's price, so it is not a price ceiling.
 
 **`ServiceMeta` / catalog entries** (`@x402cloud/discovery`, `@x402cloud/manifests`) — the
 data that drives the marketplace catalog, `llms.txt`, `openapi.json`, and each priced service's

@@ -144,13 +144,13 @@ Tests follow the same Hickey principle: **compose simple parts, don't modify the
 
 ```
 1. Client → Server:  POST /endpoint (no payment)
-2. Server → Client:  402 + PaymentRequired (scheme, maxAmount, payTo, asset, network)
-3. Client:           Signs Permit2 authorization for up to maxAmount
+2. Server → Client:  402 + PaymentRequired (scheme, amount, payTo, asset, network)
+3. Client:           Signs Permit2 authorization covering the quoted amount
 4. Client → Server:  POST /endpoint + PAYMENT-SIGNATURE header
 5. Server:           Verify signature (no on-chain tx)
 6. Server:           Execute request (run inference, etc.)
 7. Server:           Meter actual usage → settlementAmount
-8. Server:           Settle on-chain for actual cost (≤ maxAmount)
+8. Server:           Settle on-chain for actual cost (≤ the quoted amount)
 9. Server → Client:  200 + X-Payment-Settled header
 ```
 
