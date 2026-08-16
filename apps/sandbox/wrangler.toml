@@ -28,3 +28,40 @@ name = "Sandbox"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Sandbox"]
+
+# ── Mainnet environment (config only — not deployed by this change) ─────────
+# Per docs/MAINNET-RUNBOOK.md §5 step 2.
+#
+# CORRECTION (review finding, radekdymacz/workspace#44): named environments
+# do not inherit bindings from the top level. The container + Durable Object
+# bindings above ARE redeclared below for that reason — per runbook §6 they
+# still provision on deploy with no separate CLI step, and each `[env.X]`
+# still deploys as its own Worker script so this environment gets its own
+# Sandbox DO storage for free, but the binding itself has to be named again
+# or the mainnet worker would have vars and no way to spin up a sandbox.
+[env.mainnet]
+name = "x402cloud-sandbox-mainnet"
+
+[env.mainnet.vars]
+NETWORK = "eip155:8453"
+FACILITATOR_URL = "https://facilitator-mainnet.x402cloud.ai"
+FACILITATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
+OPERATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
+
+[env.mainnet.route]
+pattern = "sandbox-mainnet.x402cloud.ai"
+custom_domain = true
+
+[[env.mainnet.containers]]
+class_name = "Sandbox"
+image = "./Dockerfile"
+instance_type = "lite"
+max_instances = 1
+
+[[env.mainnet.durable_objects.bindings]]
+class_name = "Sandbox"
+name = "Sandbox"
+
+[[env.mainnet.migrations]]
+tag = "v1"
+new_sqlite_classes = ["Sandbox"]

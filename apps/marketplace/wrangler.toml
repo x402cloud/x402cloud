@@ -10,3 +10,25 @@ OPERATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
 [route]
 pattern = "marketplace.x402cloud.ai"
 custom_domain = true
+
+# ── Mainnet environment (config only — not deployed by this change) ─────────
+# Per docs/MAINNET-RUNBOOK.md §5 step 3. The catalog itself (which service
+# URLs and networks it advertises) is separate from this wrangler.toml — see
+# packages/manifests — and still needs its own mainnet entries wired in before
+# this environment is meaningful; that is not part of this change.
+#
+# Checked against review finding radekdymacz/workspace#44 (named environments
+# don't inherit bindings): this app declares no durable_objects/queues/ai/
+# browser/containers bindings at the top level, so there is nothing else to
+# redeclare here — vars + route are the whole contract.
+[env.mainnet]
+name = "x402cloud-marketplace-mainnet"
+
+[env.mainnet.vars]
+NETWORK = "eip155:8453"
+FACILITATOR_URL = "https://facilitator-mainnet.x402cloud.ai"
+OPERATOR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
+
+[env.mainnet.route]
+pattern = "marketplace-mainnet.x402cloud.ai"
+custom_domain = true

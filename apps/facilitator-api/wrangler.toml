@@ -51,3 +51,55 @@ max_retries = 5
 max_batch_size = 10
 max_batch_timeout = 5
 dead_letter_queue = "settle-retry-dlq"
+
+# ── Mainnet environment (config only — not deployed by this change) ─────────
+# Per docs/MAINNET-RUNBOOK.md §5 step 1. RPC_URL is a placeholder — paste the
+# operator's Alchemy/QuickNode Base mainnet URL before `wrangler deploy --env
+# mainnet` (never commit a real RPC URL with an embedded API key). Secrets
+# (FACILITATOR_PRIVATE_KEY, FACILITATOR_API_TOKEN) are set separately with
+# `wrangler secret put <NAME> --env mainnet` — see runbook §4.
+#
+# CORRECTION (review finding, radekdymacz/workspace#44): named environments
+# do NOT inherit bindings from the top level — only a handful of top-level
+# keys (compatibility_date/flags, account_id, ...) carry over. A mainnet
+# deploy without its own durable_objects/migrations/queues blocks would boot
+# with vars but no SETTLEMENT_DO and no SETTLE_QUEUE binding, so every
+# settle() call would throw at runtime. So the DO and the queues ARE
+# redeclared below — each `[env.X]` still deploys as its own Worker script,
+# so the DO gets its own storage for free even with the same class name, but
+# the binding itself has to be named again. The queues get their own
+# mainnet-suffixed names (create them first) rather than sharing
+# "settle-retry" with testnet, per this PR's resource-naming convention.
+[env.mainnet]
+name = "x402cloud-facilitator-mainnet"
+
+[env.mainnet.vars]
+NETWORK = "eip155:8453"
+OUR_ADDRESS = "0x207C6D8f63Bf01F70dc6D372693E8D5943848E88"
+RPC_URL = "<alchemy-or-quicknode-base-mainnet-url>"
+
+[env.mainnet.route]
+pattern = "facilitator-mainnet.x402cloud.ai"
+custom_domain = true
+
+[[env.mainnet.durable_objects.bindings]]
+name = "SETTLEMENT_DO"
+class_name = "SettlementDO"
+
+[[env.mainnet.migrations]]
+tag = "v1"
+new_sqlite_classes = ["SettlementDO"]
+
+# Create these before `wrangler deploy --env mainnet`:
+#   npx wrangler queues create settle-retry-mainnet
+#   npx wrangler queues create settle-retry-mainnet-dlq
+[[env.mainnet.queues.producers]]
+binding = "SETTLE_QUEUE"
+queue = "settle-retry-mainnet"
+
+[[env.mainnet.queues.consumers]]
+queue = "settle-retry-mainnet"
+max_retries = 5
+max_batch_size = 10
+max_batch_timeout = 5
+dead_letter_queue = "settle-retry-mainnet-dlq"
