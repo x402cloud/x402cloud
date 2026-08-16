@@ -95,23 +95,6 @@ export function nextBreakerState(
 }
 
 /**
- * Check whether an attempt is allowed given the current breaker state.
- * Also returns the (possibly transitioned) breaker state.
- */
-function checkAttempt(
-  current: CircuitBreaker,
-  threshold: number,
-  resetMs: number,
-  now: number,
-): { allowed: boolean; breaker: CircuitBreaker } {
-  const next = nextBreakerState(current, "attempt", threshold, resetMs, now);
-  if (current.state === "OPEN" && next.state === "OPEN") {
-    return { allowed: false, breaker: next };
-  }
-  return { allowed: true, breaker: next };
-}
-
-/**
  * Creates a fetch wrapper with retry (exponential backoff) and circuit breaker.
  *
  * Circuit breaker states:
@@ -120,6 +103,22 @@ function checkAttempt(
  *   HALF_OPEN — after `circuitBreakerResetMs`, allow one probe request through
  *
  * Retries only on network errors and 5xx responses (not 4xx).
+ *
+ * Concurrency contract for the `breaker` reference:
+ * `nextBreakerState` stays pure (current state + event → new state, no
+ * mutation, no I/O). The mutable `breaker` variable below is the single
+ * managed reference every concurrent call to the returned `resilientFetch`
+ * shares. Every read-modify-write of it MUST happen as one synchronous
+ * expression — `breaker = nextBreakerState(breaker, ...)` — with no
+ * `await` between reading the current value and writing the computed
+ * one. `applyTransition` is the only place that touches `breaker`, so
+ * that invariant only has to be verified in one spot. JavaScript's
+ * single-threaded, run-to-completion execution guarantees that no other
+ * synchronous statement (including another in-flight call's own
+ * transition) can run between the read and the write of a single
+ * expression, so this is race-free without locks — as long as nobody
+ * hoists `breaker` into a local variable before an `await` and reuses
+ * that stale snapshot afterwards. Do not do that.
  */
 export function createResilientFetch(config?: ResilientFetchConfig): typeof fetch {
   const maxRetries = config?.maxRetries ?? DEFAULTS.maxRetries;
@@ -128,18 +127,27 @@ export function createResilientFetch(config?: ResilientFetchConfig): typeof fetc
   const resetMs = config?.circuitBreakerResetMs ?? DEFAULTS.circuitBreakerResetMs;
   const requestTimeoutMs = config?.requestTimeoutMs ?? DEFAULTS.requestTimeoutMs;
 
-  // Mutable reference — transition logic lives in pure nextBreakerState
+  // Mutable reference — transition logic lives in pure nextBreakerState.
+  // Mutate ONLY through applyTransition (see concurrency contract above).
   let breaker: CircuitBreaker = {
     state: "CLOSED",
     failures: 0,
     lastFailureTime: 0,
   };
 
+  /** The sole mutation point for `breaker` — always reads the live value at call time. */
+  function applyTransition(event: BreakerEvent, now: number): CircuitBreaker {
+    breaker = nextBreakerState(breaker, event, threshold, resetMs, now);
+    return breaker;
+  }
+
   const resilientFetch: typeof fetch = async (input, init?) => {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      const check = checkAttempt(breaker, threshold, resetMs, Date.now());
-      breaker = check.breaker;
-      if (!check.allowed) {
+      const now = Date.now();
+      const before = breaker;
+      const after = applyTransition("attempt", now);
+      const allowed = !(before.state === "OPEN" && after.state === "OPEN");
+      if (!allowed) {
         throw new Error("Circuit breaker is OPEN — facilitator unavailable");
       }
 
@@ -158,7 +166,7 @@ export function createResilientFetch(config?: ResilientFetchConfig): typeof fetc
         clearTimeout(timeoutId);
 
         if (isRetryableStatus(response.status)) {
-          breaker = nextBreakerState(breaker, "failure", threshold, resetMs, Date.now());
+          applyTransition("failure", Date.now());
           if (attempt < maxRetries) {
             await sleep(retryDelayMs * 2 ** attempt);
             continue;
@@ -168,11 +176,11 @@ export function createResilientFetch(config?: ResilientFetchConfig): typeof fetc
         }
 
         // Success or 4xx (non-retryable) — record success and return
-        breaker = nextBreakerState(breaker, "success", threshold, resetMs, Date.now());
+        applyTransition("success", Date.now());
         return response;
       } catch (error: unknown) {
         clearTimeout(timeoutId);
-        breaker = nextBreakerState(breaker, "failure", threshold, resetMs, Date.now());
+        applyTransition("failure", Date.now());
         // AbortError from our timeout is retryable; AbortError from the caller
         // is not (caller wants to give up).
         const isTimeout =

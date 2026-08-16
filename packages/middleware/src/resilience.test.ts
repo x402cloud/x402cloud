@@ -200,5 +200,51 @@ describe("createResilientFetch", () => {
       const res = await resilientFetch("https://example.com/a", { method: "POST" });
       expect(res.status).toBe(200);
     });
+
+    it("does not lose a failure increment when two calls are in flight concurrently", async () => {
+      const resilientFetch = createResilientFetch({
+        maxRetries: 0,
+        retryDelayMs: 1,
+        circuitBreakerThreshold: 2,
+        circuitBreakerResetMs: 60_000,
+      });
+
+      // Two deferred rejections so BOTH requests reach their `await fetch(...)`
+      // before either one settles — this is the interleaving that would lose
+      // an increment if the breaker's read-modify-write were split across an
+      // await instead of happening as one synchronous expression.
+      let rejectFirst!: (reason: unknown) => void;
+      let rejectSecond!: (reason: unknown) => void;
+      const first = new Promise<Response>((_, reject) => {
+        rejectFirst = reject;
+      });
+      const second = new Promise<Response>((_, reject) => {
+        rejectSecond = reject;
+      });
+      mockFetch.mockReturnValueOnce(first).mockReturnValueOnce(second);
+
+      // Kick off both calls before either has resolved.
+      const p1 = resilientFetch("https://example.com/a", { method: "POST" }).catch((e) => e);
+      const p2 = resilientFetch("https://example.com/a", { method: "POST" }).catch((e) => e);
+
+      // Let both calls run up to their `await fetch(...)` suspension point.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      // Now fail both — neither has recorded its failure on the breaker yet.
+      rejectFirst(new TypeError("fetch failed"));
+      rejectSecond(new TypeError("fetch failed"));
+      await Promise.all([p1, p2]);
+
+      // Threshold is 2: if both failures were counted, the circuit is now
+      // OPEN and the next call fast-fails without reaching fetch. If an
+      // increment were lost, failures would only be 1 and this call would
+      // go through to fetch instead.
+      await expect(
+        resilientFetch("https://example.com/a", { method: "POST" }),
+      ).rejects.toThrow("Circuit breaker is OPEN");
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
   });
 });
