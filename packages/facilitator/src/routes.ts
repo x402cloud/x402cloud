@@ -1,5 +1,5 @@
 import { Hono, type MiddlewareHandler } from "hono";
-import type { PaymentRequirements } from "@x402cloud/protocol";
+import { normalizeRequirements, type PaymentRequirements } from "@x402cloud/protocol";
 import type { UptoPayload, ExactPayload } from "@x402cloud/evm";
 import type { Facilitator } from "./types.js";
 
@@ -24,6 +24,15 @@ export type CreateFacilitatorRoutesOptions = {
  * @param getFacilitator - Lazy getter (supports Workers lazy init and Docker eager init)
  * @param options        - Optional auth middleware
  */
+/**
+ * True when `requirements` carries a price under either spelling. Checked at
+ * the HTTP boundary so a malformed body gets a 400 with a reason, rather than
+ * letting `normalizeRequirements` throw into a bare 500.
+ */
+function hasPrice(requirements?: PaymentRequirements): boolean {
+  return Boolean(requirements && (requirements.maxAmount ?? requirements.amount));
+}
+
 export function createFacilitatorRoutes(
   getFacilitator: () => Facilitator,
   options: CreateFacilitatorRoutesOptions = {},
@@ -44,12 +53,12 @@ export function createFacilitatorRoutes(
       requirements: PaymentRequirements;
     }>();
 
-    if (!body.payload || !body.requirements) {
+    if (!body.payload || !hasPrice(body.requirements)) {
       return c.json({ isValid: false, invalidReason: "missing payload or requirements" }, 400);
     }
 
     const f = getFacilitator();
-    const result = await f.verify(body.payload, body.requirements);
+    const result = await f.verify(body.payload, normalizeRequirements(body.requirements));
     return c.json(result);
   });
 
@@ -61,12 +70,16 @@ export function createFacilitatorRoutes(
       settlementAmount: string;
     }>();
 
-    if (!body.payload || !body.requirements || !body.settlementAmount) {
+    if (!body.payload || !hasPrice(body.requirements) || !body.settlementAmount) {
       return c.json({ success: false, errorReason: "missing payload, requirements, or settlementAmount" }, 400);
     }
 
     const f = getFacilitator();
-    const result = await f.settle(body.payload, body.requirements, body.settlementAmount);
+    const result = await f.settle(
+      body.payload,
+      normalizeRequirements(body.requirements),
+      body.settlementAmount,
+    );
     return c.json(result);
   });
 
@@ -77,12 +90,12 @@ export function createFacilitatorRoutes(
       requirements: PaymentRequirements;
     }>();
 
-    if (!body.payload || !body.requirements) {
+    if (!body.payload || !hasPrice(body.requirements)) {
       return c.json({ isValid: false, invalidReason: "missing payload or requirements" }, 400);
     }
 
     const f = getFacilitator();
-    const result = await f.verifyExact(body.payload, body.requirements);
+    const result = await f.verifyExact(body.payload, normalizeRequirements(body.requirements));
     return c.json(result);
   });
 
@@ -93,12 +106,12 @@ export function createFacilitatorRoutes(
       requirements: PaymentRequirements;
     }>();
 
-    if (!body.payload || !body.requirements) {
+    if (!body.payload || !hasPrice(body.requirements)) {
       return c.json({ success: false, errorReason: "missing payload or requirements" }, 400);
     }
 
     const f = getFacilitator();
-    const result = await f.settleExact(body.payload, body.requirements);
+    const result = await f.settleExact(body.payload, normalizeRequirements(body.requirements));
     return c.json(result);
   });
 

@@ -1,6 +1,7 @@
 import {
   decodeRequirementsHeader,
   encodePaymentHeader,
+  normalizeRequirements,
   type PaymentRequired,
 } from "@x402cloud/protocol";
 import { createUptoPayload, createExactPayload } from "@x402cloud/evm";
@@ -51,8 +52,10 @@ export function wrapFetchWithPayment(
         break; // No payment options available
       }
 
-      // Pick the first accepted payment method
-      const requirements = paymentRequired.accepts[0];
+      // Pick the first accepted payment method. Normalizing here means an offer
+      // from a spec-conformant server (which writes `amount`, not `maxAmount`)
+      // signs correctly instead of throwing on an undefined price.
+      const requirements = normalizeRequirements(paymentRequired.accepts[0]);
 
       // Sign payment based on scheme
       const handler = schemes[requirements.scheme];

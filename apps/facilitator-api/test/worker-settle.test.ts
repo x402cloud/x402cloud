@@ -143,7 +143,7 @@ function settleBody() {
       signature: "0xsig",
       permit2Authorization: { nonce: NONCE, permitted: { amount: "10000" } },
     },
-    requirements: { scheme: "upto", network: "eip155:84532" },
+    requirements: { scheme: "upto", network: "eip155:84532", maxAmount: "10000" },
     settlementAmount: "5000",
   };
 }
@@ -274,7 +274,7 @@ describe("worker queue() consumer", () => {
     nonce: NONCE,
     mode: "broadcast",
     payload: { signature: "0xsig", permit2Authorization: { nonce: NONCE } },
-    requirements: { scheme: "upto", network: "eip155:84532" },
+    requirements: { scheme: "upto", network: "eip155:84532", maxAmount: "10000" },
     settlementAmount: "5000",
     network: "eip155:84532",
   };

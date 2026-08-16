@@ -34,6 +34,12 @@ const mockRequirements = {
   maxTimeoutSeconds: 300,
 };
 
+/**
+ * What the facilitator actually receives: the route normalizes requirements at
+ * the HTTP boundary, so both spellings of the price are populated.
+ */
+const normalizedRequirements = { ...mockRequirements, amount: "10000" };
+
 async function post(app: ReturnType<typeof createFacilitatorRoutes>, path: string, body: unknown) {
   return app.request(path, {
     method: "POST",
@@ -55,7 +61,7 @@ describe("createFacilitatorRoutes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ isValid: true, payer: "0xPayer" });
-      expect(fac.verify).toHaveBeenCalledWith(mockPayload, mockRequirements);
+      expect(fac.verify).toHaveBeenCalledWith(mockPayload, normalizedRequirements);
     });
 
     it("returns 400 if payload missing", async () => {
@@ -96,7 +102,7 @@ describe("createFacilitatorRoutes", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as { success: boolean };
       expect(body.success).toBe(true);
-      expect(fac.settle).toHaveBeenCalledWith(mockPayload, mockRequirements, "5000");
+      expect(fac.settle).toHaveBeenCalledWith(mockPayload, normalizedRequirements, "5000");
     });
 
     it("returns 400 if settlementAmount missing", async () => {

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>x402cloud.ai — Open Source x402 Protocol Implementation</title>
-  <meta name="description" content="The open-source implementation of the x402 protocol. Libraries, facilitator, and tools to add HTTP-native payments to any API.">
+  <title>x402cloud.ai — AI Inference Agents Pay For Per Token</title>
+  <meta name="description" content="OpenAI-compatible AI inference that agents pay for per token in USDC. No signup, no API keys — payment is authentication. Built on the x402 standard.">
   <meta property="og:title" content="x402cloud.ai — Open Source x402 Protocol Implementation">
   <meta property="og:description" content="The open-source implementation of the x402 protocol standard. Add HTTP-native payments to any API with USDC.">
   <meta property="og:image" content="https://x402cloud.pages.dev/og.png">
@@ -195,6 +195,15 @@
     }
 
     /* ── Code block ── */
+    .section-desc code {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      color: var(--text-bright);
+      border: 1px solid var(--border-dashed);
+      padding: 1px 5px;
+      border-radius: 2px;
+    }
+
     .hero-code {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -536,9 +545,10 @@
     <div class="inner">
       <a href="/" class="wordmark">x402cloud.ai</a>
       <div class="nav-links">
-        <a href="#services">Services</a>
+        <a href="#models">Models</a>
+        <a href="#how">How it works</a>
         <a href="#pricing">Pricing</a>
-        <a href="#packages">Packages</a>
+        <a href="#build">Build with it</a>
         <a href="https://status.x402cloud.ai">Status</a>
         <a href="https://github.com/x402cloud/x402cloud">GitHub</a>
         <a href="https://x402cloud.ai/llms.txt">Docs</a>
@@ -548,34 +558,35 @@
 
   <div class="hero">
     <div class="hero-text">
-      <h1>The open-source<br><span class="dim">x402 implementation</span></h1>
-      <p class="lead">Libraries, facilitator, and tools implementing the x402 protocol standard. Add HTTP-native payments to any API. USDC on any chain.</p>
+      <h1>AI inference<br><span class="dim">your agent pays for</span></h1>
+      <p class="lead">An OpenAI-compatible endpoint that charges per token in USDC over the x402 standard. No signup, no API keys, no invoice. Your agent gets a 402, signs it, and the tokens arrive.</p>
       <div class="hero-actions">
-        <a href="https://github.com/x402cloud/x402cloud#quick-start" class="btn btn-primary">Get started</a>
-        <a href="https://facilitator.x402cloud.ai/" class="btn btn-ghost">API docs</a>
-        <a href="https://infer.x402cloud.ai/models" class="btn btn-ghost">Try inference</a>
-        <a href="https://github.com/x402cloud/x402cloud/tree/main/examples" class="btn btn-ghost">Examples</a>
+        <a href="https://infer.x402cloud.ai" class="btn btn-primary">Start inferring</a>
+        <a href="#models" class="btn btn-ghost">Models &amp; prices</a>
+        <a href="https://infer.x402cloud.ai/openapi.json" class="btn btn-ghost">OpenAPI</a>
+        <a href="https://x402cloud.ai/llms.txt" class="btn btn-ghost">llms.txt</a>
       </div>
     </div>
     <div class="hero-code">
       <div class="code-tab">
-        <span class="file">server.ts</span>
+        <span class="file">agent.ts</span>
         <span>TypeScript</span>
       </div>
       <div class="code-body">
-        <div><span class="ln"> 1</span><span class="c">// Add payments to any Hono API</span></div>
-        <div><span class="ln"> 2</span><span class="k">import</span> { <span class="h">uptoPaymentMiddleware</span> } <span class="k">from</span></div>
-        <div><span class="ln"> 3</span>&nbsp;&nbsp;<span class="s">"@x402cloud/middleware"</span></div>
-        <div><span class="ln"> 4</span></div>
-        <div><span class="ln"> 5</span><span class="h">app</span>.use(<span class="s">"/*"</span>, uptoPaymentMiddleware({</div>
-        <div><span class="ln"> 6</span>&nbsp;&nbsp;<span class="s">"POST /api"</span>: {</div>
-        <div><span class="ln"> 7</span>&nbsp;&nbsp;&nbsp;&nbsp;network: <span class="s">"eip155:8453"</span>,</div>
-        <div><span class="ln"> 8</span>&nbsp;&nbsp;&nbsp;&nbsp;maxPrice: <span class="s">"$0.01"</span>,</div>
-        <div><span class="ln"> 9</span>&nbsp;&nbsp;&nbsp;&nbsp;payTo: <span class="s">"0x207C...8E88"</span>,</div>
-        <div><span class="ln">10</span>&nbsp;&nbsp;}</div>
-        <div><span class="ln">11</span>}))</div>
-        <div><span class="ln">12</span></div>
-        <div><span class="ln">13</span><span class="c">// That's it. Your API now accepts USDC.</span></div>
+        <div><span class="ln"> 1</span><span class="c">// A wallet instead of an API key</span></div>
+        <div><span class="ln"> 2</span><span class="k">const</span> <span class="h">fetch</span> = wrapFetchWithPayment({ signer })</div>
+        <div><span class="ln"> 3</span></div>
+        <div><span class="ln"> 4</span><span class="k">const</span> res = <span class="k">await</span> <span class="h">fetch</span>(</div>
+        <div><span class="ln"> 5</span>&nbsp;&nbsp;<span class="s">"https://infer.x402cloud.ai"</span> +</div>
+        <div><span class="ln"> 6</span>&nbsp;&nbsp;<span class="s">"/v1/chat/completions"</span>, {</div>
+        <div><span class="ln"> 7</span>&nbsp;&nbsp;&nbsp;&nbsp;method: <span class="s">"POST"</span>,</div>
+        <div><span class="ln"> 8</span>&nbsp;&nbsp;&nbsp;&nbsp;body: JSON.stringify({</div>
+        <div><span class="ln"> 9</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;model: <span class="s">"fast"</span>,</div>
+        <div><span class="ln">10</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;messages,</div>
+        <div><span class="ln">11</span>&nbsp;&nbsp;&nbsp;&nbsp;}),</div>
+        <div><span class="ln">12</span>&nbsp;&nbsp;})</div>
+        <div><span class="ln">13</span></div>
+        <div><span class="ln">14</span><span class="c">// 402 signed, settled, tokens returned.</span></div>
       </div>
     </div>
   </div>
@@ -585,27 +596,27 @@
   <section id="how">
     <div class="section-label">Protocol</div>
     <div class="section-title">Four steps. No signup.</div>
-    <div class="section-desc">The x402 protocol handles payment negotiation over standard HTTP. Any client that speaks x402 can pay any x402 API.</div>
+    <div class="section-desc">Payment negotiation happens over plain HTTP, so any client that speaks the x402 standard can call us — including Cloudflare agents and the official x402 SDKs.</div>
     <div class="protocol-flow">
       <div class="flow-step">
         <div class="flow-num">Step 01</div>
         <div class="flow-label">Request</div>
-        <div class="flow-desc">Agent calls your API</div>
+        <div class="flow-desc">Agent posts a completion request</div>
       </div>
       <div class="flow-step">
         <div class="flow-num">Step 02</div>
         <div class="flow-label">402 Response</div>
-        <div class="flow-desc">Server returns price</div>
+        <div class="flow-desc">We return a ceiling price</div>
       </div>
       <div class="flow-step">
         <div class="flow-num">Step 03</div>
         <div class="flow-label">Sign &amp; Retry</div>
-        <div class="flow-desc">Client signs Permit2 authorization</div>
+        <div class="flow-desc">Agent signs, we run the model</div>
       </div>
       <div class="flow-step">
         <div class="flow-num">Step 04</div>
         <div class="flow-label">Settle</div>
-        <div class="flow-desc">On-chain USDC settlement</div>
+        <div class="flow-desc">We charge the tokens actually used</div>
       </div>
     </div>
   </section>
@@ -613,70 +624,74 @@
   <hr class="divider">
 
   <section>
-    <div class="section-label">Architecture</div>
-    <div class="section-title">Everything you need for x402</div>
-    <div class="section-desc">Open source library to add payments. Hosted facilitator to handle settlement. Services your agents can use today.</div>
+    <div class="section-label">Why</div>
+    <div class="section-title">Metered, not subscribed</div>
+    <div class="section-desc">An inference call's cost is unknown until the tokens exist. Fixed-price payment cannot express that. Metered payment can.</div>
     <div class="stack-grid">
       <div class="stack-card">
         <div class="stack-num">01</div>
-        <h3>Open Source Library</h3>
-        <p>Add x402 payments to any API. Protocol types, EVM schemes, middleware, client SDK. npm install and go.</p>
+        <h3>Pay for tokens, not ceilings</h3>
+        <p>Your agent authorizes a maximum. We run the model, count the tokens, and settle the real figure. The difference is never taken — it was never moved.</p>
       </div>
       <div class="stack-card">
         <div class="stack-num">02</div>
-        <h3>Hosted Facilitator</h3>
-        <p>We handle payment verification and on-chain settlement. Multi-chain. Sub-100ms from 330+ Cloudflare edge cities.</p>
+        <h3>A wallet is the account</h3>
+        <p>No signup form, no API key to rotate, no card on file. An agent that can sign can buy. That is the whole onboarding.</p>
       </div>
       <div class="stack-card">
         <div class="stack-num">03</div>
-        <h3>Agent Services</h3>
-        <p>Ready-to-use x402 APIs. AI inference, agent identity, analytics. Pay per call with USDC, no signup needed.</p>
+        <h3>OpenAI wire format</h3>
+        <p>POST /v1/chat/completions, /v1/embeddings, /v1/images/generations, GET /v1/models. Point an existing client at the base URL and the shapes match.</p>
       </div>
     </div>
   </section>
 
   <hr class="divider">
 
-  <section id="services">
-    <div class="section-label">Services</div>
-    <div class="section-title">APIs built for agents</div>
-    <div class="section-desc">Every service accepts x402 micropayments. No API keys, no signup. Payment is authentication.</div>
+  <section id="models">
+    <div class="section-label">Models</div>
+    <div class="section-title">Eight models, one endpoint</div>
+    <div class="section-desc">Call a model by short name (<code>fast</code>) or by the OpenAI field (<code>"model": "fast"</code>). Prices below are the ceiling your agent authorizes; settlement takes only the metered cost. Live figures: <a href="https://infer.x402cloud.ai/models" style="color: var(--text-bright); border-bottom: 1px dashed var(--border-dashed);">infer.x402cloud.ai/models</a>.</div>
     <div class="services-grid">
-      <a href="https://github.com/x402cloud/x402cloud" class="service-card">
-        <div class="service-domain">x402cloud.ai</div>
-        <h3>Library</h3>
-        <p>Open source x402 implementation. Protocol types, EVM payment schemes, middleware, client SDK. npm install and go.</p>
-        <span class="service-tag live">Live</span>
-      </a>
-      <a href="https://infer.x402cloud.ai" class="service-card">
-        <div class="service-domain">infer.x402cloud.ai</div>
-        <h3>Inference</h3>
-        <p>Edge AI inference. OpenAI-compatible. Llama, DeepSeek, Qwen, Flux. Pay per token.</p>
-        <span class="service-tag live">Live</span>
-      </a>
-      <a href="https://facilitator.x402cloud.ai" class="service-card">
-        <div class="service-domain">facilitator.x402cloud.ai</div>
-        <h3>Facilitator</h3>
-        <p>Hosted verification and settlement. Base, Ethereum, Arbitrum, Optimism, Polygon.</p>
-        <span class="service-tag live">Live</span>
-      </a>
       <div class="service-card">
-        <div class="service-domain">identity.x402cloud.ai</div>
-        <h3>Identity</h3>
-        <p>Face verification, liveness detection, proof of humanity, anti-sybil. Pay-per-call biometric APIs.</p>
-        <span class="service-tag">Coming soon</span>
+        <div class="service-domain">nano</div>
+        <h3>Fastest, simple tasks</h3>
+        <p>IBM Granite 4.0 H Micro. Ceiling $0.000277 per call — you are charged the tokens you actually use.</p>
       </div>
       <div class="service-card">
-        <div class="service-domain">trust.x402cloud.ai</div>
-        <h3>Reputation</h3>
-        <p>On-chain trust scores for agents and sellers. Built from real x402 settlement history across all facilitators.</p>
-        <span class="service-tag">Coming soon</span>
+        <div class="service-domain">fast</div>
+        <h3>Quick and capable</h3>
+        <p>Llama 4 Scout 17B. Ceiling $0.002202 per call — you are charged the tokens you actually use.</p>
       </div>
       <div class="service-card">
-        <div class="service-domain">wallet.x402cloud.ai</div>
-        <h3>Agent Wallets</h3>
-        <p>Wallet creation, spending limits, budget controls. Multi-sig for agent fleets. Ready-to-go wallets for autonomous agents.</p>
-        <span class="service-tag">Coming soon</span>
+        <div class="service-domain">smart</div>
+        <h3>Reliable workhorse</h3>
+        <p>Llama 3.1 8B Instruct. Ceiling $0.000946 per call — you are charged the tokens you actually use.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-domain">big</div>
+        <h3>Highest quality</h3>
+        <p>Llama 3.3 70B FP8. Ceiling $0.005582 per call — you are charged the tokens you actually use.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-domain">think</div>
+        <h3>Deep reasoning</h3>
+        <p>DeepSeek R1 Distill Qwen 32B. Ceiling $0.012013 per call — you are charged the tokens you actually use.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-domain">code</div>
+        <h3>Code specialist</h3>
+        <p>Qwen2.5 Coder 32B. Ceiling $0.002794 per call — you are charged the tokens you actually use.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-domain">embed</div>
+        <h3>Text embeddings</h3>
+        <p>BAAI BGE-M3. Ceiling $0.000115 per call — you are charged the tokens you actually use.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-domain">image</div>
+        <h3>Image generation</h3>
+        <p>FLUX.1 schnell. Ceiling $0.002280 per call — you are charged the tokens you actually use.</p>
       </div>
     </div>
   </section>
@@ -686,7 +701,7 @@
   <section id="pricing">
     <div class="section-label">Pricing</div>
     <div class="section-title">Pay per request. Nothing else.</div>
-    <div class="section-desc">Every request is a USDC micropayment over the x402 protocol. No accounts, no API keys, no subscriptions, no minimums — your wallet is your identity.</div>
+    <div class="section-desc">Every completion is a USDC micropayment. No accounts, no API keys, no subscriptions, no minimums — your wallet is your identity.</div>
     <div class="stack-grid">
       <div class="stack-card">
         <div class="stack-num">01</div>
@@ -695,23 +710,23 @@
       </div>
       <div class="stack-card">
         <div class="stack-num">02</div>
-        <h3>Inference, priced per call</h3>
-        <p>Each model has its own per-token or per-image price, metered per request. See <a href="https://infer.x402cloud.ai/models" style="color: var(--text-bright); border-bottom: 1px dashed var(--border-dashed);">infer.x402cloud.ai/models</a> for live per-model prices.</p>
+        <h3>Priced per model</h3>
+        <p>Each model carries its own per-token or per-image rate. A short prompt to <code>nano</code> costs a fraction of a cent; <code>think</code> costs more because it reasons for longer. Nothing is rounded up to a plan.</p>
       </div>
       <div class="stack-card">
         <div class="stack-num">03</div>
-        <h3>Facilitator: free on testnet</h3>
-        <p>The hosted facilitator's verify and settle endpoints are currently free while the service runs on Base Sepolia testnet. The open-source library is free forever — run your own facilitator anytime.</p>
+        <h3>Running on testnet today</h3>
+        <p>Settlement is USDC on <strong>Base Sepolia</strong>, so the amounts above move test dollars, not real ones. Get test USDC from the Circle faucet and the full flow works end to end. Mainnet is the next flip, not a rewrite.</p>
       </div>
     </div>
   </section>
 
   <hr class="divider">
 
-  <section id="packages">
-    <div class="section-label">Packages</div>
-    <div class="section-title">Five packages. Zero lock-in.</div>
-    <div class="section-desc">Everything is open source and modular. Use what you need.</div>
+  <section id="build">
+    <div class="section-label">Build with it</div>
+    <div class="section-title">The rail is open source</div>
+    <div class="section-desc">The inference API is the product; the plumbing underneath is not. These packages implement the x402 v2 standard and are free to use, fork or self-host — including for APIs that have nothing to do with us.</div>
     <div class="pkg-grid">
       <div class="pkg-item">
         <div class="name">protocol</div>

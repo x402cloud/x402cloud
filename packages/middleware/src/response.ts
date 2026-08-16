@@ -23,11 +23,17 @@ function buildPaymentRequiredResponse(
     throw new Error(`No USDC address for network ${network}. Provide asset explicitly.`);
   }
 
+  // Both spellings of the price go on the wire: `amount` is what the x402 v2
+  // spec names it (so stock clients — @x402/fetch, Cloudflare agents — can read
+  // the offer), `maxAmount` is what our own client and EVM package have always
+  // read. Same value, so there is nothing to disagree about.
+  const amount = parseUsdcAmount(priceString);
   const requirements: PaymentRequirements = {
     scheme,
     network,
     asset: resolvedAsset,
-    maxAmount: parseUsdcAmount(priceString),
+    amount,
+    maxAmount: amount,
     payTo,
     maxTimeoutSeconds: maxTimeoutSeconds ?? 300,
     ...(extra ? { extra } : {}),
@@ -40,6 +46,7 @@ function buildPaymentRequiredResponse(
 
   return {
     x402Version: 2,
+    error: "PAYMENT-SIGNATURE header is required",
     resource,
     accepts: [requirements],
   };

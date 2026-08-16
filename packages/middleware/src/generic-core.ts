@@ -258,6 +258,7 @@ export async function processPayment<TRouteConfig extends BaseRouteConfig, TPayl
     scheme: strategy.scheme,
     network: routeConfig.network,
     asset,
+    amount: strategy.getPrice(routeConfig),
     maxAmount: strategy.getPrice(routeConfig),
     payTo: routeConfig.payTo,
     maxTimeoutSeconds: routeConfig.maxTimeoutSeconds ?? 300,
@@ -275,9 +276,11 @@ export async function processPayment<TRouteConfig extends BaseRouteConfig, TPayl
       action: "invalid_payment",
       status,
       body: {
+        // Spread first: the builder sets the generic "header is required"
+        // error, and this path has a more specific reason to report.
+        ...paymentRequired,
         error: "Payment verification failed",
         reason: verification.invalidReason,
-        ...paymentRequired,
       },
       encoded,
     };

@@ -1,16 +1,19 @@
 # x402cloud.ai
 
-Open-source implementation of the x402 protocol standard. Libraries, facilitator, and tools for HTTP-native payments with USDC.
+OpenAI-compatible AI inference that agents pay for per token in USDC over the x402 standard. No signup, no API keys — payment is authentication.
 
 ## Overview
 
-x402cloud.ai implements the x402 protocol standard (x402.org):
+The product is metered inference. `infer.x402cloud.ai` serves OpenAI-compatible chat, embedding and image endpoints and charges the tokens actually consumed, not a subscription and not a fixed per-call fee.
 
-- **Protocol implementation** — 5 npm packages: protocol types, EVM payment schemes, server middleware, client SDK, and facilitator logic
-- **Hosted facilitator** — On-chain payment verification and USDC settlement at facilitator.x402cloud.ai
-- **Reference services** — Production APIs using x402 payments (AI inference, more coming)
+- **Inference API** — `https://infer.x402cloud.ai`, OpenAI wire format, 8 models, priced per token
+- **Metered payment (`upto`)** — the client authorizes a ceiling; settlement moves only the metered cost
+- **Open-source rail** — 5 npm packages implementing x402 v2, free to use for any API, ours or yours
+- **Hosted facilitator** — verification and USDC settlement at `facilitator.x402cloud.ai`; any conformant facilitator also works
 
-No API keys. No signup. Payment is authentication.
+Current network: **Base Sepolia (testnet)**. Amounts settle in test USDC. Mainnet is a configuration change, not a rewrite.
+
+Standards conformance: 402 responses follow the Linux Foundation x402 v2 specification (`x402Version: 2`, CAIP-2 networks, `PAYMENT-SIGNATURE` header). The price appears as both `amount` (the spec's name) and `maxAmount` (this implementation's original name), carrying the same value, so stock clients — `@x402/fetch`, Cloudflare Agents SDK — can read an offer without special-casing.
 
 ## How x402 Works
 

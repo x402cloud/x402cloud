@@ -4,16 +4,42 @@ export type Network = `${string}:${string}`;
 /** Payment scheme identifier */
 export type Scheme = "exact" | "upto";
 
-/** What the server accepts as payment */
+/**
+ * What the server accepts as payment.
+ *
+ * `amount` is the field name in the x402 v2 specification; `maxAmount` is this
+ * implementation's original name for the same value and stays as the internal
+ * canonical field so no call site has to change. Wire payloads carry BOTH, and
+ * `normalizeRequirements` fills `maxAmount` from `amount` on the way in — so an
+ * offer built by a spec-conformant server (amount only) and one built here are
+ * both payable by both clients. Accretion, not breakage.
+ */
 export type PaymentRequirements = {
   scheme: Scheme;
   network: Network;
   asset: string;
   maxAmount: string;
+  /** x402 v2 spelling of `maxAmount`. Always emitted; optional on input. */
+  amount?: string;
   payTo: string;
   maxTimeoutSeconds: number;
   extra?: Record<string, unknown>;
 };
+
+/**
+ * Accept a `PaymentRequirements` written in either spelling and return one with
+ * both fields populated. Throws if neither is present — a requirements object
+ * without a price is not payable, and failing here beats signing `undefined`.
+ */
+export function normalizeRequirements(
+  requirements: PaymentRequirements & { amount?: string },
+): PaymentRequirements {
+  const value = requirements.maxAmount ?? requirements.amount;
+  if (!value) {
+    throw new Error("PaymentRequirements is missing both `amount` and `maxAmount`");
+  }
+  return { ...requirements, maxAmount: value, amount: value };
+}
 
 /** Resource being paid for */
 export type ResourceInfo = {

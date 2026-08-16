@@ -7,6 +7,11 @@ import type { ClientSigner } from "@x402cloud/evm";
 vi.mock("@x402cloud/protocol", () => ({
   decodeRequirementsHeader: vi.fn((header: string) => JSON.parse(atob(header))),
   encodePaymentHeader: vi.fn((payload: unknown) => btoa(JSON.stringify(payload))),
+  normalizeRequirements: vi.fn((r: { amount?: string; maxAmount?: string }) => {
+    const value = r.maxAmount ?? r.amount;
+    if (!value) throw new Error("PaymentRequirements is missing both `amount` and `maxAmount`");
+    return { ...r, maxAmount: value, amount: value };
+  }),
 }));
 
 // Mock @x402cloud/evm

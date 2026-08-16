@@ -2,125 +2,120 @@
 
 ## Position
 
-**x402cloud.ai is the open-source x402 standard implementation — the library, the facilitator, and the services that make agent payments work.**
+**x402cloud.ai sells metered services that agents pay for per request. The plumbing is the standard's; the product is what runs behind the 402.**
 
-The Stripe playbook: open-source library gets developer adoption, default facilitator captures transaction flow, unique services generate revenue.
+Revised 2026-08-16. The earlier thesis put the facilitator first — own the library, own the
+default facilitator, and let services follow. That thesis was written before Cloudflare closed both
+ends of the rail. It no longer holds, and this document says why and what replaces it.
 
-## The Stack
+## What changed in 2026
+
+| Date | What shipped | Effect on us |
+|---|---|---|
+| Apr 2026 | Linux Foundation takes the x402 standard | The spec is neutral. Nobody wins by owning the protocol |
+| Jul 2026 | Linux Foundation x402 Foundation goes operational — 40 members, Cloudflare, Stripe, Visa, Mastercard, Google, AWS, Circle | Same conclusion, with a bigger table |
+| 1 Jul 2026 | Cloudflare [Monetization Gateway](https://blog.cloudflare.com/monetization-gateway/) — payment rules at the edge, like WAF rules | The sell side is a config change for anyone already on Cloudflare |
+| 4 Aug 2026 | Cloudflare [Wallets + cloudflare.pay](https://blog.cloudflare.com/wallets/) — agent wallets, spend caps, allow-lists | The buy side belongs to Cloudflare too |
+| ongoing | Coinbase runs the default public facilitator, free | The middle has no price to charge |
+
+A facilitator holds no funds. It verifies a signature and broadcasts a pre-signed transaction. A
+merchant with its own RPC can skip it. Coinbase gives that away; Stripe charges 1.5%. There is no
+defensible margin between a free incumbent and a bundled one, and the buyer never chose us anyway
+— Cloudflare's wallet did.
+
+So: **stop competing where the value does not accrue.**
+
+## The new shape
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  3. SERVICES (revenue)                          │
-│  Identity, inference, analytics                 │
-│  Unique x402-paid APIs agents actually need     │
+│  SERVICES — the product, the revenue            │
+│  Metered APIs agents pay for per request        │
+│  Sovereign EU inference first                   │
 ├─────────────────────────────────────────────────┤
-│  2. FACILITATOR (brand + distribution)          │
-│  Multi-chain on Cloudflare edge                 │
-│  Every tx that flows through = our name on it   │
+│  METERING — the thin layer we keep              │
+│  `upto`: authorize a ceiling, settle the        │
+│  real cost after the work is done               │
 ├─────────────────────────────────────────────────┤
-│  1. OPEN SOURCE LIBRARY (developer acquisition) │
-│  Best-in-class x402 implementation              │
-│  Devs adopt → default to our facilitator        │
+│  PROTOCOL — the standard's, not ours            │
+│  x402 v2, official schemes, any facilitator     │
 └─────────────────────────────────────────────────┘
 ```
 
-## Layer 1: Open Source Library (@x402cloud/*)
+### Protocol: conform, don't compete
 
-The best x402 implementation wins developers. Developers who adopt the library default to our facilitator.
+We track the Linux Foundation spec and stay wire-compatible with stock clients — `@x402/fetch`,
+Cloudflare's Agents SDK, anything that speaks x402 v2. That is a maintenance obligation, not a
+moat, and we treat it that way.
 
-**What we ship:**
-- `@x402cloud/protocol` — types, headers, encoding (zero deps)
-- `@x402cloud/evm` — EVM payment schemes (exact + upto)
-- `@x402cloud/client` — auto-pay 402 responses from any HTTP client
-- `@x402cloud/middleware` — server middleware (Hono, generic)
-- `@x402cloud/facilitator` — verify + settle logic
+**Binding rule:** a 402 we emit must be payable by a client that has never heard of x402cloud, and
+a 402 from any conformant server must be payable by our client. Where our names and the spec's
+names differ, the wire carries both and the inbound path normalizes (`normalizeRequirements` in
+`@x402cloud/protocol`). Accretion, not breakage.
 
-**Why we win:**
-- Chain-agnostic from day 1 (any EVM chain, extensible to Solana)
-- Clean separation of concerns (protocol / chain / middleware)
-- Best DX — `npm install @x402cloud/hono`, add one middleware, done
+The packages stay open source and stay published. They are how a developer meets us and how we
+keep our own services honest — not a product line to defend.
 
-## Layer 2: Facilitator (facilitator.x402cloud.ai)
+### Metering: the one piece worth owning
 
-Every x402 transaction needs a facilitator. Ours is the default.
+Fixed-price payment (`exact`) is solved and commoditized. **Usage-priced payment is not.** An
+inference call's cost is unknown until the tokens are generated. The `upto` scheme — authorize a
+ceiling, settle the actual figure — is the only sane way to bill an agent for work whose price
+emerges from the work.
 
-**Advantages:**
-- Cloudflare edge deployment — sub-100ms verification from 330+ cities
-- Multi-chain: Base, Ethereum, Arbitrum, Optimism, Polygon (Solana next)
-- Optimized for high-frequency micropayments ($0.001-$0.10)
-- Built-in analytics — every tx through us is data we can surface
+We already have this working end to end: the client signs a ceiling, the server runs the request,
+a `meter()` function computes the real cost, and settlement moves only that. Everything a
+usage-priced API needs is in `@x402cloud/middleware`.
 
-**The data moat:**
-Every transaction flowing through our facilitator gives us visibility into the x402 ecosystem — who's buying, who's selling, what's growing. This data feeds our analytics service and our product decisions.
+That is a small surface, deliberately. It is the difference between "a payment library" and "the
+way you charge for compute".
 
-## Layer 3: Services
+### Services: where the money is
 
-Unique x402-paid APIs that agents need and nobody else provides.
+**Sovereign metered inference is the flagship.** Cloudflare, Coinbase and Stripe are US companies.
+An EU buyer under GDPR, a healthcare provider, a public body — none of them can route prompts or
+settlement through a US-owned stack, however good the DX. That constraint is not a preference and
+it will not be competed away.
 
-### infer.x402cloud.ai — AI Inference
-Pay-per-call AI inference at the edge. No signup, no API keys, just USDC.
-- OpenAI-compatible API (change `base_url` and it works)
-- Best open models (Llama, Qwen, DeepSeek, Flux)
-- Cloudflare Workers AI = edge compute, no cold starts
+NativeKloud already owns the answer: `api.nativekloud.eu` (see the `platform/` project) runs
+open-weight models on EU bare metal with zero content retention and no US vendor in the serving
+path. x402cloud supplies the metered payment layer in front of it. Neither project has to become
+the other.
 
-### identity.x402cloud.ai — Agent Identity Services
-The identity gap for agents is massive. Nobody owns it yet.
+| Service | Status | What it is |
+|---|---|---|
+| **Sovereign inference** (`api.nativekloud.eu`) | design | EU-hosted, usage-metered, agent-payable. The flagship. Constrained by `platform/`'s sovereignty rules — see the open question below |
+| `infer.x402cloud.ai` | live (testnet) | Cloudflare Workers AI behind `upto` metering. Proves the rail, not the moat. Useful as the public reference implementation |
+| Agent identity | idea | ERC-8004 is unowned. Genuinely valuable, genuinely hard. Not a 2026 commitment |
+| Ecosystem analytics | dropped | Depended on transaction flow through our facilitator. No flow, no data |
 
-| Service | Why Agents Need It |
-|---------|-------------------|
-| 1:1 face matching | KYC, proof of humanity |
-| Agent reputation scoring | "Is this agent trustworthy?" |
-| Wallet-to-identity resolution | "Who is 0xef43...?" |
-| Agent spending profiles | "This agent spends $35K/mo on inference" |
+### Open question, stated not hidden
 
-ERC-8004 (trust/identity layer) is being built by Google/MetaMask/Coinbase but nobody owns the implementation. This is the highest-value gap.
+`platform/` forbids any Cloudflare dependency and any US-owned service — including USDC (Circle,
+US) and Base (Coinbase, US). Sovereign x402 inference therefore cannot simply reuse
+`infer.x402cloud.ai`'s stack. It needs either an EU-issued stablecoin, an EU settlement path, or
+an explicit, documented, customer-visible exception.
 
-### pulse.x402cloud.ai — Analytics API
-Nobody has a working public API for x402 ecosystem data. We do.
-- Seller leaderboards, buyer activity, volume trends
-- x402-paid itself (meta, but real)
-- Built on the data flowing through our facilitator
+This is the first design question to settle, and it is a `hammock` session, not a coding task. The
+answer determines whether the flagship is one product or two.
 
-## Priorities
+## What we stopped doing
 
-| # | What | Why |
-|---|------|-----|
-| 1 | Facilitator | Every tx flows through us. Data moat + brand. Edge deployment = fastest possible |
-| 2 | OSS library | Developer acquisition funnel. Default to our facilitator |
-| 3 | Identity service | Genuinely unique, nobody else does this for agents. High value per call |
-| 4 | Inference service | Compete on price with CF Workers AI as free compute |
-| 5 | Analytics API | Monetize the data gap |
+- **Racing to be the default facilitator.** Ours keeps running for our own services and for anyone
+  who wants a self-hostable one. It is infrastructure we operate, not a market we are entering.
+- **Positioning the library as the product.** It stays open and maintained. It is not the pitch.
+- **Building an analytics business on facilitator flow** that will not exist.
 
-## Future Opportunities
+## Design principles
 
-**Agent Wallet-as-a-Service** — Easy wallet creation, budget controls, spend limits per agent, multi-sig for agent fleets.
+1. **Conform where it's a standard, differentiate where it's a product.** Protocol code is a cost centre.
+2. **Meter honestly.** Charge the real cost, never the ceiling. It is the whole reason `upto` exists.
+3. **Sovereignty is the moat, not the tech.** Anyone can copy the code. Nobody can relocate Cloudflare.
+4. **Agent-first.** Zero onboarding, zero API keys, payment is authentication.
+5. **Simple Made Easy.** Data over mechanisms, accretion over breakage.
 
-**Developer Tooling** — x402 playground/sandbox, pricing calculator, status page for facilitators and chains, mock facilitator for local dev.
+## Related
 
-**Facilitator Specialization** — AI/inference optimized (high-frequency micro), built-in analytics dashboards for sellers, SLA guarantees.
-
-**Virtuals ACP** — All services listed on the Virtuals marketplace for 18K agent buyers.
-
-## Design Principles
-
-1. **Open source the standard, monetize the infrastructure** — library is free, facilitator and services earn
-2. **Chain-agnostic** — any EVM chain today, Solana tomorrow, new chains without code changes
-3. **Edge-native** — no origin servers, no cold starts, everything on Cloudflare
-4. **Agent-first** — zero onboarding, zero API keys, payment IS authentication
-5. **Simple Made Easy** — data over mechanisms, composition over configuration, accretion over breakage
-
-## Technical Architecture
-
-```
-Agent → HTTPS → Cloudflare Edge (330+ cities)
-                    ↓
-              @x402cloud/middleware
-                    ↓
-         facilitator.x402cloud.ai (verify)
-          ↓ (402 if unpaid)    ↓ (paid)
-     Payment Required     Service Handler
-                              ↓
-                    Response + Settlement
-```
-
-No origin servers. No databases. No state. Pure edge compute.
+- `nativekloud/platform` — sovereign inference API, the flagship's compute side
+- `CLAUDE.md` — repository structure and engineering rules
+- [x402 v2 specification](https://github.com/coinbase/x402/blob/main/specs/x402-specification-v2.md)

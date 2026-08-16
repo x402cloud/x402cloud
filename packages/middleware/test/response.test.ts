@@ -140,3 +140,37 @@ describe("buildExactPaymentRequired (exact)", () => {
     expect(result.accepts[0].network).toBe("eip155:424242");
   });
 });
+
+describe("x402 v2 wire conformance", () => {
+  // The spec (specs/x402-specification-v2.md §5.1.2) names the price field
+  // `amount`. This implementation has always called it `maxAmount` internally.
+  // Emitting both is what lets a stock x402 client — @x402/fetch, a Cloudflare
+  // agent — read an offer built here, so these assertions are load-bearing.
+  const cfg: UptoRouteConfig = {
+    network: "eip155:8453",
+    maxPrice: "$0.10",
+    payTo,
+    meter: () => "100000",
+  };
+
+  it("emits both `amount` and `maxAmount`, holding the same value", () => {
+    const req = buildPaymentRequired(cfg, resourceUrl, facilitator).accepts[0];
+
+    expect(req.amount).toBe("100000");
+    expect(req.maxAmount).toBe("100000");
+  });
+
+  it("emits `amount` on exact offers too", () => {
+    const exact: ExactRouteConfig = { network: "eip155:8453", price: "$0.05", payTo };
+    const req = buildExactPaymentRequired(exact, resourceUrl).accepts[0];
+
+    expect(req.amount).toBe("50000");
+    expect(req.maxAmount).toBe("50000");
+  });
+
+  it("carries the spec's optional `error` string on the unpaid 402", () => {
+    const result = buildPaymentRequired(cfg, resourceUrl, facilitator);
+
+    expect(result.error).toBe("PAYMENT-SIGNATURE header is required");
+  });
+});

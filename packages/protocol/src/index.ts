@@ -13,6 +13,8 @@ export type {
   SettlementEvent,
 } from "./types.js";
 
+export { normalizeRequirements } from "./types.js";
+
 export {
   encodePaymentHeader,
   decodePaymentHeader,
